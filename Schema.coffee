@@ -10,7 +10,7 @@ class JQL.Schema
         result = new JQL.Schema()
 
         result.names = schema.names.slice(0)
-        result.indices = schema.indices.slice(0)
+        # result.indices = schema.indices.slice(0)
         result.types = schema.types.slice(0)
         for col in schema.cols
             result.cols.push {
@@ -24,7 +24,7 @@ class JQL.Schema
     constructor: (record, preTyped) ->
         @cols = []
         @names = []
-        @indices = []
+        # @indices = []
         @types = []
 
         if record?
@@ -47,7 +47,7 @@ class JQL.Schema
                     prime: false
                 }
                 @names.push k
-                @indices.push i
+                # @indices.push i
                 @types.push type
                 i++
 
@@ -99,19 +99,34 @@ class JQL.Schema
     # should be called after modifying this.cols
     _updateData: () ->
         names = []
-        indices = []
+        # indices = []
         types = []
         for col, i in @cols
             names.push col.name
-            indices.push i
+            # indices.push i
             types.push col.type
         @names = names
-        @indices = indices
+        # @indices = indices
         @types = types
         return @
 
     clone: () ->
         return JQL.Schema.fromSchema(@)
+
+    and: (schema) ->
+        result = @clone()
+
+        # kick out the columns that are not in 'schema'
+        indicesToRemove = []
+        for name, i in @names when schema.nameToIdx(name) < 0
+            indicesToRemove.push i
+
+        @cols = (col for col, i in @cols when i not in indicesToRemove)
+        @_updateData()
+
+        return result
+
+    or: (schema) ->
 
     addColumn: (col) ->
         colData =
@@ -141,6 +156,10 @@ class JQL.Schema
         @_updateData()
         return @
 
+    renameColumn = (oldName, newName) ->
+        @schema.renameColumn oldName, newName
+        return @
+
     colNamed: (name) ->
         for col in @cols when col.name is name
             return col
@@ -151,18 +170,19 @@ class JQL.Schema
             # cache array references
             n1 = @names
             n2 = schema.names
-            i1 = @indices
-            i2 = schema.indices
+            # i1 = @indices
+            # i2 = schema.indices
             t1 = @types
             t2 = schema.types
 
-            for i in [0...l] when n1[i] isnt n2[i] or i1[i] isnt i2[i] or t1[i] isnt t2[i]
+            # for i in [0...l] when n1[i] isnt n2[i] or i1[i] isnt i2[i] or t1[i] isnt t2[i]
+            for i in [0...l] when n1[i] isnt n2[i] or t1[i] isnt t2[i]
                 return false
             return true
         return false
 
     nameToIdx: (name) ->
-        return @indices[@names.indexOf name]
+        return @names.indexOf name
 
     idxToName: (idx) ->
-        return @names[@indices.indexOf idx]
+        return @names[idx]

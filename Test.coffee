@@ -31,6 +31,14 @@ window.test = () ->
         }
     ]
 
+    arr1 = [1, true, "asdf", [1,2,3], 4]
+    arr2 = [1, true, "asdf", [1,2,3], 4]
+    arr3 = [[1,2], [3,4]]
+    console.log "comparing arrays:"
+    console.log arrEquals(arr1, arr2)
+    console.log arrEquals(arr1, arr3)
+
+
     @jql = jql = JQL.fromJSON @json
     @colJql = colJql = JQL.new.fromColJSON @colJson
     console.log jql

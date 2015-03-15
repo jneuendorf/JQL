@@ -1,4 +1,11 @@
-
+###
+select (from), where
+update, set
+join
+insert (into)
+distinct
+functions: avg, sum, count, max, min, first, last
+###
 class JQL.Table
 
     @sqlToJsType =
@@ -89,8 +96,6 @@ class JQL.Table
         if (matches = sql.match createTableRegex)?
             tables = {}
 
-            # console.log matches
-
             for match in matches
                 info = createTableRegex.exec match
                 # this is needed for repeatedly using the regex without acting like the global modifier is on
@@ -167,9 +172,6 @@ class JQL.Table
                         .slice values.indexOf("(")
                         .split /\s*\,(?![^\(]*\))\s*/g
 
-                    console.log name
-                    console.log values
-
                     # add values to existing table
                     if (table = tables[name])?
                         records = []
@@ -179,21 +181,22 @@ class JQL.Table
                                 .slice(value.indexOf("(") + 1, value.indexOf(")"))
                                 .split /\s*,\s*/g
                             records.push value
-                        console.log ">", records
                         table.insert records
                     # new table => create and insert
                     else
                         console.warn "Table '#{name}' does not exist! Create (first) with CREATE TABLE!"
 
-                    # console.log info
-                    # console.log name, values
-
             console.log tables
-
             return tables
         # else:
         console.warn "SQL statement somehow invalid (back ticks erased already):", sql
         return null
+
+    @new.fromTable = (table) ->
+        return new JQL.Table(
+            table.schema.clone()
+            record.slice(0) for record in table.records
+        )
 
     constructor: (schema, records, name="Table", partOf=null) ->
         if schema instanceof JQL.Schema
@@ -232,6 +235,9 @@ class JQL.Table
                 set: getSelf
         }
 
+    clone: () ->
+        return JQL.Table.new.fromTable(@)
+
     row: (n) ->
         return new JQL.Table(@schema, [@records[n]], @name, @)
 
@@ -241,6 +247,9 @@ class JQL.Table
 
         return (record[n] for record in @records)
 
+    # TODO: enable labeling (col AS name)
+    # TODO: enable table referencing (SELECT table1.id, table2.id)
+    #       => make "Table.column" equal to "column" and make operations (like join) automatically prepend their table name
     select: (cols...) ->
         # select all columns
         if not cols? or cols[0] is "*"
@@ -313,6 +322,7 @@ class JQL.Table
                 # form lt:
                 #       col: val
                 # invalid col names are ignored here
+                # TODO: use setting to decide what to do with inexistent keys
                 else if pool[key]? and not pool[key](val, record)
                     return false
             return true
@@ -345,7 +355,7 @@ class JQL.Table
         idx = @schema.nameToIdx colName
 
         for record, i in @records
-            @records[j] = (col for col, j in record when j isnt idx)
+            @records[i] = (col for col, j in record when j isnt idx)
 
         return @
 
@@ -363,7 +373,7 @@ class JQL.Table
         @schema.renameColumn oldName, newName
         return @
 
-    @::alter.changeColumnName = (name) ->
+    @::alter.changeColumnName = () ->
         return @alter.renameColumn.apply(@, arguments)
 
     rename: (name) ->
@@ -371,22 +381,56 @@ class JQL.Table
         return @
 
     and: (table) ->
+        # records = []
+        # for record in @records when record in table.records
+        #     records.push record
+        # TODO: this operation is not commutative.
+        # if 'this' contains 2 identical rows R and 'table' also has that row the result depends on the order:
+        # this.and(table) != table.and(this)
+        #    both rows R   -    1 row R
+        # TODO: maybe assume uniqueness right away?!?
+
+        return new JQL.Table(
+            @schema.clone()
+            record for record in @records when record in table.records
+        )
 
     or: (table) ->
+        return new JQL.Table(
+            @schema.clone()
+            @records.concat table.records
+        )
 
     join: (table, col) ->
 
+
     set: () ->
 
-    groupBy: () ->
+    unique: () ->
 
+    distinct: () ->
+        return @unique.applu(@, arguments)
+
+    groupBy: (aggregation) ->
+
+
+    # in place
     orderBy: (cols...) ->
-        records = []
-        for record in @records
-            # TODO: sort here
-            records.push record
+        if cols[0] instanceof Array
+            cols = cols[0]
 
-        return new JQL.Table(@schema, records)
+        schema = @schema
+
+        @records.sort (r1, r2) ->
+            for col in cols
+                idx = schema.nameToIdx col
+                if r1[idx] < r2[idx]
+                    return -1
+                if r1[idx] > r2[idx]
+                    return 1
+            return 0
+
+        return @
 
     insert: (records...) ->
         if records[0] instanceof Array
@@ -398,16 +442,21 @@ class JQL.Table
             else
                 # TODO: check primary (if set)?!
                 r = []
-                for col in @schema.cols
-                    r.push record[col.name]
+                for name in @schema.names
+                    r.push record[name]
                 @records.push r
         return @
 
     delete: (param) ->
         # child (= subset) table given
         if param instanceof JQT.Table
-            # TODO
-            # @records = (record for record in @records when record isnt where)
+            child = param
+            incidesToRemove = []
+            for childRecord in param.records
+                for record, i in @records when arrEquals(childRecord, record)
+                    incidesToRemove.push i
+                    break
+            @records = (record for record, i in @records when i not in incidesToRemove)
         # where predicate given
         else if param?
             @delete @where(param.where or predicate)
@@ -416,8 +465,8 @@ class JQL.Table
             @partOf?.delete @
         return @
 
-    @::["delete"].where = (predicate) ->
-        return @delete predicate
+    @::["delete"].where = () ->
+        return @delete.apply(@, arguments)
 
     each: (callback) ->
         for record, i in @records

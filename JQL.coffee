@@ -12,6 +12,21 @@ getSelf = () ->
 toArr = (args) ->
     return Array::slice.call args
 
+# http://stackoverflow.com/questions/7837456/comparing-two-arrays-in-javascript
+arrEquals = (arr1, arr2) ->
+    if arr1.length isnt arr2.length
+        return false
+
+    for x, i in arr1
+        y = arr2[i]
+        if x instanceof Array and y instanceof Array
+            if not arrEquals(x, y)
+                return false
+        else if x isnt y
+            return false
+
+    return true
+
 cloneObject = (obj) ->
     return JSON.parse JSON.stringify(obj)
 
@@ -19,12 +34,3 @@ cloneObject = (obj) ->
 #     key = Object.key obj
 #     key = key[0]
 #     return obj[key]
-
-###
-select (from), where
-update, set
-join
-insert (into)
-distinct
-functions: avg, sum, count, max, min, first, last
-###
