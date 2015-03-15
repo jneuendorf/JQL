@@ -86,31 +86,6 @@ class JQL.Table
         # TODO: this info should at least be in the documentation
         insertRegex = /INSERT INTO\s+(\w+)\s*(\(\w+(\s*,\s*\w+)*\)\s+)?(VALUES\s+\((\w+|\d+|'\w+')(\s*,\s*(\w+|\d+|'\w+'))*\)(\s*,\s*\((\w+|\d+|'\w+')(\s*,\s*(\w+|\d+|'\w+'))*\))*)/gi
 
-        # CREATE TABLE table_name(
-        #    column1 datatype,
-        #    column2 datatype,
-        #    column3 datatype,
-        #    .....
-        #    columnN datatype,
-        #    PRIMARY KEY( one or more columns )
-        # );
-        # CREATE TABLE CUSTOMERS(
-        #    ID   INT              NOT NULL,
-        #    NAME VARCHAR (20)     NOT NULL,
-        #    AGE  INT              NOT NULL,
-        #    ADDRESS  CHAR (25) ,
-        #    SALARY   DECIMAL (18, 2),
-        #    PRIMARY KEY (ID)
-        # );
-        # CREATE TABLE `users` (
-        #   `id` INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,
-        #   `username` VARCHAR(16) NOT NULL,
-        #   `password` VARCHAR(16) NOT NULL,
-        #   PRIMARY KEY (`id`)
-        # );
-
-        console.log "SQL...."
-
         if (matches = sql.match createTableRegex)?
             tables = {}
 
@@ -208,6 +183,7 @@ class JQL.Table
                         table.insert records
                     # new table => create and insert
                     else
+                        console.warn "Table '#{name}' does not exist! Create (first) with CREATE TABLE!"
 
                     # console.log info
                     # console.log name, values
@@ -215,18 +191,16 @@ class JQL.Table
             console.log tables
 
             return tables
-
         # else:
         console.warn "SQL statement somehow invalid (back ticks erased already):", sql
         return null
 
-
-
-    constructor: (schema, records, name="Table") ->
+    constructor: (schema, records, name="Table", partOf=null) ->
         if schema instanceof JQL.Schema
             @schema = schema
             @records = records or []
             @name = name
+            @partOf = partOf
         else
             pseudoRecord = {}
 
@@ -248,6 +222,7 @@ class JQL.Table
             @schema = new JQL.Schema(pseudoRecord, true)
             @records = []
             @name = "Table"
+            @partOf = null
 
         # create props that are just for being close to SQL
         # i.e. this.update.set ...
@@ -258,7 +233,7 @@ class JQL.Table
         }
 
     row: (n) ->
-        return new JQL.Table(@schema, [@records[n]])
+        return new JQL.Table(@schema, [@records[n]], @name, @)
 
     col: (n) ->
         if typeof n is "string"
@@ -282,7 +257,7 @@ class JQL.Table
 
         schema.cols = (col for col, i in schema.cols when col.index in indicesToKeep)
         schema._updateData()
-        return new JQL.Table(schema, records)
+        return new JQL.Table(schema, records, @name, @)
 
     project: () ->
         return @select.apply(@, arguments)
@@ -346,27 +321,103 @@ class JQL.Table
         return new JQL.Table(
             @schema.clone()
             record for record in records when check(predicate, record)
+            @name
+            @
         )
 
-    and: () ->
+    alter: () ->
 
-    or: () ->
+    # form: {name:, type:, notNull:, autoIncrement:, prime/primaryKey:, initVal: }
+    @::alter.addColumn = (col) ->
+        if col.notNull is true and not col.initVal
+            console.warn "Can't add NOT NULL column if no initial value is given!"
+            return @
 
-    join: () ->
+        @schema.addColumn col
+
+        for record in @records
+            record.push(col.initVal or null)
+
+        return @
+
+    @::alter.deleteColumn = (colName) ->
+        @schema.deleteColumn colName
+        idx = @schema.nameToIdx colName
+
+        for record, i in @records
+            @records[j] = (col for col, j in record when j isnt idx)
+
+        return @
+
+    @::alter.dropColumn = () ->
+        return @alter.deleteColumn.apply(@, arguments)
+
+    @::alter.changeColumn = (name, type) ->
+        @schema.changeColumn name, type
+        return @
+
+    @::alter.changeColumnType = () ->
+        return @alter.changeColumn.apply(@, arguments)
+
+    @::alter.renameColumn = (oldName, newName) ->
+        @schema.renameColumn oldName, newName
+        return @
+
+    @::alter.changeColumnName = (name) ->
+        return @alter.renameColumn.apply(@, arguments)
+
+    rename: (name) ->
+        @name = "#{name}"
+        return @
+
+    and: (table) ->
+
+    or: (table) ->
+
+    join: (table, col) ->
 
     set: () ->
 
     groupBy: () ->
 
-    orderBy: () ->
+    orderBy: (cols...) ->
+        records = []
+        for record in @records
+            # TODO: sort here
+            records.push record
+
+        return new JQL.Table(@schema, records)
 
     insert: (records...) ->
+        if records[0] instanceof Array
+            records = records[0]
+
         for record in records
-            # TODO: check primary (if set)
-            true
+            if record instanceof Array
+                @records.push record
+            else
+                # TODO: check primary (if set)?!
+                r = []
+                for col in @schema.cols
+                    r.push record[col.name]
+                @records.push r
         return @
 
-    delete: () ->
+    delete: (param) ->
+        # child (= subset) table given
+        if param instanceof JQT.Table
+            # TODO
+            # @records = (record for record in @records when record isnt where)
+        # where predicate given
+        else if param?
+            @delete @where(param.where or predicate)
+        # nothing given => assume 'this' is a child (= subset) of some table
+        else
+            @partOf?.delete @
+        return @
+
+    @::["delete"].where = (predicate) ->
+        return @delete predicate
 
     each: (callback) ->
         for record, i in @records

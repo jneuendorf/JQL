@@ -77,7 +77,7 @@ class JQL.Schema
     setPrimaryKeys: (cols...) ->
         if cols[0] instanceof Array
             cols = cols[0]
-            
+
         for col in @cols
             if col.name in cols
                 col.prime = true
@@ -112,6 +112,34 @@ class JQL.Schema
 
     clone: () ->
         return JQL.Schema.fromSchema(@)
+
+    addColumn: (col) ->
+        colData =
+            name:           col.name
+            index:          @cols.length
+            type:           col.type
+            notNull:        col.notNull or false
+            autoIncrement:  col.autoIncrement or false
+            prime:          col.prime or col.primaryKey or false
+
+        @cols.push colData
+        return @
+
+    deleteColumn: (name) ->
+        idx = @nameToIdx name
+        @cols = (col for col, i in @cols when i isnt idx)
+        @_updateData()
+        return @
+
+    renameColumn: (oldName, newName) ->
+        @cols[@nameToIdx(oldName)].name = newName
+        @_updateData()
+        return @
+
+    changeColumn: (name, type) ->
+        @cols[@nameToIdx(name)].type = type
+        @_updateData()
+        return @
 
     colNamed: (name) ->
         for col in @cols when col.name is name

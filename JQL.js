@@ -174,6 +174,51 @@
       return JQL.Schema.fromSchema(this);
     };
 
+    Schema.prototype.addColumn = function(col) {
+      var colData;
+      colData = {
+        name: col.name,
+        index: this.cols.length,
+        type: col.type,
+        notNull: col.notNull || false,
+        autoIncrement: col.autoIncrement || false,
+        prime: col.prime || col.primaryKey || false
+      };
+      this.cols.push(colData);
+      return this;
+    };
+
+    Schema.prototype.deleteColumn = function(name) {
+      var col, i, idx;
+      idx = this.nameToIdx(name);
+      this.cols = (function() {
+        var _i, _len, _ref, _results;
+        _ref = this.cols;
+        _results = [];
+        for (i = _i = 0, _len = _ref.length; _i < _len; i = ++_i) {
+          col = _ref[i];
+          if (i !== idx) {
+            _results.push(col);
+          }
+        }
+        return _results;
+      }).call(this);
+      this._updateData();
+      return this;
+    };
+
+    Schema.prototype.renameColumn = function(oldName, newName) {
+      this.cols[this.nameToIdx(oldName)].name = newName;
+      this._updateData();
+      return this;
+    };
+
+    Schema.prototype.changeColumn = function(name, type) {
+      this.cols[this.nameToIdx(name)].type = type;
+      this._updateData();
+      return this;
+    };
+
     Schema.prototype.colNamed = function(name) {
       var col, _i, _len, _ref;
       _ref = this.cols;
@@ -297,7 +342,6 @@
       colDefRegex = /(\w+)\s+(\w+)\s*(\(\s*\w+(\s*,\s*\w+)*\s*\))?\s*((\w+)\s+)*(\w+)?/gi;
       primareKeyRegex = /PRIMARY\s+KEY\s*\(\s*\w+(\s*,\s*\w+)*\s*\)/gi;
       insertRegex = /INSERT INTO\s+(\w+)\s*(\(\w+(\s*,\s*\w+)*\)\s+)?(VALUES\s+\((\w+|\d+|'\w+')(\s*,\s*(\w+|\d+|'\w+'))*\)(\s*,\s*\((\w+|\d+|'\w+')(\s*,\s*(\w+|\d+|'\w+'))*\))*)/gi;
-      console.log("SQL....");
       if ((matches = sql.match(createTableRegex)) != null) {
         tables = {};
         for (_i = 0, _len = matches.length; _i < _len; _i++) {
@@ -364,7 +408,7 @@
               console.log(">", records);
               table.insert(records);
             } else {
-
+              console.warn("Table '" + name + "' does not exist! Create (first) with CREATE TABLE!");
             }
           }
         }
@@ -375,15 +419,19 @@
       return null;
     };
 
-    function Table(schema, records, name) {
+    function Table(schema, records, name, partOf) {
       var col, cols, i, key, pseudoRecord, type, val, _i, _j, _len, _len1;
       if (name == null) {
         name = "Table";
+      }
+      if (partOf == null) {
+        partOf = null;
       }
       if (schema instanceof JQL.Schema) {
         this.schema = schema;
         this.records = records || [];
         this.name = name;
+        this.partOf = partOf;
       } else {
         pseudoRecord = {};
         if (schema instanceof Array) {
@@ -409,6 +457,7 @@
         this.schema = new JQL.Schema(pseudoRecord, true);
         this.records = [];
         this.name = "Table";
+        this.partOf = null;
       }
       Object.defineProperties(this, {
         update: {
@@ -419,7 +468,7 @@
     }
 
     Table.prototype.row = function(n) {
-      return new JQL.Table(this.schema, [this.records[n]]);
+      return new JQL.Table(this.schema, [this.records[n]], this.name, this);
     };
 
     Table.prototype.col = function(n) {
@@ -486,7 +535,7 @@
         return _results;
       })();
       schema._updateData();
-      return new JQL.Table(schema, records);
+      return new JQL.Table(schema, records, this.name, this);
     };
 
     Table.prototype.project = function() {
@@ -594,32 +643,137 @@
           }
         }
         return _results;
-      })());
+      })(), this.name, this);
     };
 
-    Table.prototype.and = function() {};
+    Table.prototype.alter = function() {};
 
-    Table.prototype.or = function() {};
+    Table.prototype.alter.addColumn = function(col) {
+      var record, _i, _len, _ref;
+      if (col.notNull === true && !col.initVal) {
+        console.warn("Can't add NOT NULL column if no initial value is given!");
+        return this;
+      }
+      this.schema.addColumn(col);
+      _ref = this.records;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        record = _ref[_i];
+        record.push(col.initVal || null);
+      }
+      return this;
+    };
 
-    Table.prototype.join = function() {};
+    Table.prototype.alter.deleteColumn = function(colName) {
+      var col, i, idx, j, record, _i, _len, _ref;
+      this.schema.deleteColumn(colName);
+      idx = this.schema.nameToIdx(colName);
+      _ref = this.records;
+      for (i = _i = 0, _len = _ref.length; _i < _len; i = ++_i) {
+        record = _ref[i];
+        this.records[j] = (function() {
+          var _j, _len1, _results;
+          _results = [];
+          for (j = _j = 0, _len1 = record.length; _j < _len1; j = ++_j) {
+            col = record[j];
+            if (j !== idx) {
+              _results.push(col);
+            }
+          }
+          return _results;
+        })();
+      }
+      return this;
+    };
+
+    Table.prototype.alter.dropColumn = function() {
+      return this.alter.deleteColumn.apply(this, arguments);
+    };
+
+    Table.prototype.alter.changeColumn = function(name, type) {
+      this.schema.changeColumn(name, type);
+      return this;
+    };
+
+    Table.prototype.alter.changeColumnType = function() {
+      return this.alter.changeColumn.apply(this, arguments);
+    };
+
+    Table.prototype.alter.renameColumn = function(oldName, newName) {
+      this.schema.renameColumn(oldName, newName);
+      return this;
+    };
+
+    Table.prototype.alter.changeColumnName = function(name) {
+      return this.alter.renameColumn.apply(this, arguments);
+    };
+
+    Table.prototype.rename = function(name) {
+      this.name = "" + name;
+      return this;
+    };
+
+    Table.prototype.and = function(table) {};
+
+    Table.prototype.or = function(table) {};
+
+    Table.prototype.join = function(table, col) {};
 
     Table.prototype.set = function() {};
 
     Table.prototype.groupBy = function() {};
 
-    Table.prototype.orderBy = function() {};
+    Table.prototype.orderBy = function() {
+      var cols, record, records, _i, _len, _ref;
+      cols = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      records = [];
+      _ref = this.records;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        record = _ref[_i];
+        records.push(record);
+      }
+      return new JQL.Table(this.schema, records);
+    };
 
     Table.prototype.insert = function() {
-      var record, records, _i, _len;
+      var col, r, record, records, _i, _j, _len, _len1, _ref;
       records = 1 <= arguments.length ? __slice.call(arguments, 0) : [];
+      if (records[0] instanceof Array) {
+        records = records[0];
+      }
       for (_i = 0, _len = records.length; _i < _len; _i++) {
         record = records[_i];
-        true;
+        if (record instanceof Array) {
+          this.records.push(record);
+        } else {
+          r = [];
+          _ref = this.schema.cols;
+          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
+            col = _ref[_j];
+            r.push(record[col.name]);
+          }
+          this.records.push(r);
+        }
       }
       return this;
     };
 
-    Table.prototype["delete"] = function() {};
+    Table.prototype["delete"] = function(param) {
+      var _ref;
+      if (param instanceof JQT.Table) {
+
+      } else if (param != null) {
+        this["delete"](this.where(param.where || predicate));
+      } else {
+        if ((_ref = this.partOf) != null) {
+          _ref["delete"](this);
+        }
+      }
+      return this;
+    };
+
+    Table.prototype["delete"].where = function(predicate) {
+      return this["delete"](predicate);
+    };
 
     Table.prototype.each = function(callback) {
       var i, record, _i, _len, _ref;
