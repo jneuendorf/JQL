@@ -55,7 +55,7 @@
 
     Schema.fromSchema = function(schema) {
       var col, result, _i, _len, _ref;
-      result = new JQL.Schema();
+      result = new JQL.Schema(schema.table);
       result.names = schema.names.slice(0);
       result.types = schema.types.slice(0);
       _ref = schema.cols;
@@ -70,8 +70,9 @@
       return result;
     };
 
-    function Schema(record, preTyped) {
+    function Schema(table, record, preTyped) {
       var i, k, type, v;
+      this.table = table;
       this.cols = [];
       this.names = [];
       this.types = [];
@@ -208,6 +209,36 @@
 
     Schema.prototype.or = function(schema) {};
 
+    Schema.prototype.concat = function(schema) {
+      var col, cols, i, result, _i, _j, _len, _len1;
+      result = this.clone();
+      cols = result.cols;
+      for (i = _i = 0, _len = cols.length; _i < _len; i = ++_i) {
+        col = cols[i];
+        if (!(__indexOf.call(col.name, ".") < 0)) {
+          continue;
+        }
+        console.log(col);
+        cols[i].name = "" + this.table.name + "." + col.name;
+      }
+      cols = schema.cols;
+      for (i = _j = 0, _len1 = cols.length; _j < _len1; i = ++_j) {
+        col = cols[i];
+        if (!(__indexOf.call(col.name, ".") < 0)) {
+          continue;
+        }
+        console.log(col);
+        cols[i].name = "" + schema.table.name + "." + col.name;
+      }
+      result.cols = result.cols.concat(schema.cols);
+      result._updateData();
+      return result;
+    };
+
+    Schema.prototype.join = function() {
+      return this.concat.apply(this, arguments);
+    };
+
     Schema.prototype.addColumn = function(col) {
       var colData;
       colData = {
@@ -323,31 +354,27 @@
 
     Table["new"].fromJSON = function(json, schema) {
       var col, r, record, records, table, _i, _j, _len, _len1, _ref;
-      if (arguments.length === 2) {
-        schema = new JQL.Schema(json);
-        records = [];
-      } else {
-        if (json instanceof Array) {
-          if (json.length > 0) {
-            schema = new JQL.Schema(json[0]);
-          } else if (!(schema instanceof JQL.Schema)) {
-            schema = new JQL.Schema(schema);
-          }
-        }
-        records = [];
-        for (_i = 0, _len = json.length; _i < _len; _i++) {
-          record = json[_i];
-          r = [];
-          _ref = schema.cols;
-          for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
-            col = _ref[_j];
-            r.push(record[col.name]);
-          }
-          records.push(r);
+      if (json instanceof Array) {
+        if (json.length > 0) {
+          schema = new JQL.Schema(null, json[0]);
+        } else if (!(schema instanceof JQL.Schema)) {
+          schema = new JQL.Schema(null, schema);
         }
       }
+      records = [];
+      for (_i = 0, _len = json.length; _i < _len; _i++) {
+        record = json[_i];
+        r = [];
+        _ref = schema.cols;
+        for (_j = 0, _len1 = _ref.length; _j < _len1; _j++) {
+          col = _ref[_j];
+          r.push(record[col.name]);
+        }
+        records.push(r);
+      }
       table = new JQL.Table(schema, records);
-      return table || null;
+      schema.table = table;
+      return table;
     };
 
     Table["new"].fromRowJSON = Table["new"].fromJSON;
@@ -379,7 +406,7 @@
           return _results;
         })());
       }
-      return new JQL.Table(new JQL.Schema(pseudoRecord, true), records);
+      return new JQL.Table(new JQL.Schema(this, this, pseudoRecord, true), records);
     };
 
     Table["new"].fromSQL = function(sql) {
@@ -423,7 +450,7 @@
               }
             }
           }
-          schema = new JQL.Schema(pseudoRecord, true);
+          schema = new JQL.Schema(this, pseudoRecord, true);
           if (notNulls.length > 0) {
             schema.setNotNulls(notNulls);
           }
@@ -512,7 +539,7 @@
             }
           }
         }
-        this.schema = new JQL.Schema(pseudoRecord, true);
+        this.schema = new JQL.Schema(this, pseudoRecord, true);
         this.records = [];
         this.name = "Table";
         this.partOf = null;
@@ -794,11 +821,72 @@
       return new JQL.Table(this.schema.clone(), this.records.concat(table.records));
     };
 
-    Table.prototype.join = function(table, col) {};
+    Table.prototype.innerJoin = function(table, leftCol, rightCol) {
+      var leftRecord, leftSchema, records, rightRecord, rightSchema, _i, _j, _len, _len1, _ref, _ref1;
+      if (!rightCol) {
+        rightCol = leftCol;
+      }
+      records = [];
+      leftSchema = this.schema;
+      rightSchema = table.schema;
+      _ref = this.records;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        leftRecord = _ref[_i];
+        _ref1 = table.records;
+        for (_j = 0, _len1 = _ref1.length; _j < _len1; _j++) {
+          rightRecord = _ref1[_j];
+          if (leftRecord[leftSchema.nameToIdx(leftCol)] === rightRecord[rightSchema.nameToIdx(rightCol)]) {
+            records.push(leftRecord.concat(rightRecord));
+          }
+        }
+      }
+      return new JQL.Table(this.schema.concat(table.schema), records);
+    };
+
+    Table.prototype.outerJoin = function(table, leftCol, rightCol) {};
+
+    Table.prototype.leftJoin = function(table, leftCol, rightCol) {};
+
+    Table.prototype.rightJoin = function(table, leftCol, rightCol) {};
+
+    Table.prototype.fullOuterJoin = function(table, leftCol, rightCol) {};
+
+    Table.prototype.join = function(table, leftCol, rightCol, type) {
+      var map, _name;
+      if (type == null) {
+        type = "inner";
+      }
+      if (arguments.length === 3) {
+        return this.innerJoin(table, leftCol, rightCol);
+      }
+      type = ("" + type).toLowerCase();
+      map = {
+        fullOuter: this.fullOuterJoin,
+        inner: this.innerJoin,
+        left: this.leftJoin,
+        outer: this.outerJoin,
+        right: this.rightJoin
+      };
+      return (typeof this[_name = map[type]] === "function" ? this[_name](table, leftCol, rightCol) : void 0) || this.innerJoin(table, leftCol, rightCol);
+    };
 
     Table.prototype.set = function() {};
 
-    Table.prototype.unique = function() {};
+    Table.prototype.unique = function() {
+      var r, record, records, _i, _j, _len, _len1, _ref;
+      records = [];
+      _ref = this.records;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        record = _ref[_i];
+        for (_j = 0, _len1 = records.length; _j < _len1; _j++) {
+          r = records[_j];
+          if (!arrEquals(record, r)) {
+            records.push(record);
+          }
+        }
+      }
+      return new JQL.Table(this.schema.clone(), records);
+    };
 
     Table.prototype.distinct = function() {
       return this.unique.applu(this, arguments);
@@ -936,7 +1024,7 @@
   JQL.fromJSON = JQL["new"].fromJSON;
 
   window.test = function() {
-    var arr1, arr2, arr3, colJql, jql, t1, t2, t3;
+    var arr1, arr2, arr3, colJql, jql, jql2, t1, t2, t3;
     this.json = [
       {
         id: 0,
@@ -948,6 +1036,15 @@
         a: -1,
         b: "jim",
         c: false
+      }
+    ];
+    this.json2 = [
+      {
+        x: 1,
+        y: 34
+      }, {
+        x: 0,
+        y: 10
       }
     ];
     this.colJson = [
@@ -967,7 +1064,10 @@
     console.log(arrEquals(arr1, arr2));
     console.log(arrEquals(arr1, arr3));
     this.jql = jql = JQL.fromJSON(this.json);
+    this.jql2 = jql2 = JQL.fromJSON(this.json2);
     this.colJql = colJql = JQL["new"].fromColJSON(this.colJson);
+    jql.name = "A";
+    jql2.name = "B";
     console.log(jql);
     console.log(jql.select("id", "b").where({
       a: 10
@@ -989,6 +1089,7 @@
       img: "string"
     });
     this.sqlJql = JQL["new"].fromSQL("CREATE TABLE users (\n    id INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,\n    username VARCHAR(16) NOT NULL,\n    password DECIMAL (18, 2) NOT NULL,\n    PRIMARY KEY ( id,b)\n);\nINSERT INTO users VALUES (1,2,3), (4,5,6);");
+    console.log(jql.join(jql2, "a", "y"));
     return "done";
   };
 

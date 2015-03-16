@@ -13,6 +13,16 @@ window.test = () ->
             c: false
         }
     ]
+    @json2 = [
+        {
+            x: 1
+            y: 34
+        }
+        {
+            x: 0
+            y: 10
+        }
+    ]
     @colJson = [
         {
             name: "col1"
@@ -40,7 +50,10 @@ window.test = () ->
 
 
     @jql = jql = JQL.fromJSON @json
+    @jql2 = jql2 = JQL.fromJSON @json2
     @colJql = colJql = JQL.new.fromColJSON @colJson
+    jql.name = "A"
+    jql2.name = "B"
     console.log jql
 
     # console.log jql.where {
@@ -89,6 +102,8 @@ window.test = () ->
         PRIMARY KEY ( id,b)
     );
     INSERT INTO users VALUES (1,2,3), (4,5,6);"""
+
+    console.log jql.join(jql2, "a", "y")
 
     return "done"
 

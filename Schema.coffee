@@ -7,7 +7,7 @@ class JQL.Schema
         object: {}
 
     @fromSchema: (schema) ->
-        result = new JQL.Schema()
+        result = new JQL.Schema(schema.table)
 
         result.names = schema.names.slice(0)
         # result.indices = schema.indices.slice(0)
@@ -21,7 +21,8 @@ class JQL.Schema
 
         return result
 
-    constructor: (record, preTyped) ->
+    constructor: (table, record, preTyped) ->
+        @table = table
         @cols = []
         @names = []
         # @indices = []
@@ -127,6 +128,26 @@ class JQL.Schema
         return result
 
     or: (schema) ->
+
+    concat: (schema) ->
+        result = @clone()
+        # update column names
+        cols = result.cols
+        for col, i in cols when "." not in col.name
+            console.log col
+            cols[i].name = "#{@table.name}.#{col.name}"
+        # update column names
+        cols = schema.cols
+        for col, i in cols when "." not in col.name
+            console.log col
+            cols[i].name = "#{schema.table.name}.#{col.name}"
+
+        result.cols = result.cols.concat schema.cols
+        result._updateData()
+        return result
+
+    join: () ->
+        return @concat.apply(@, arguments)
 
     addColumn: (col) ->
         colData =

@@ -21,28 +21,24 @@ class JQL.Table
     #     {col1: 1, col2: 2},
     #     ...
     # ]
-    @new.fromJSON   = (json, schema) ->
-        # only schema given
-        if arguments.length is 2
-            schema = new JQL.Schema(json)
-            records = []
-        else
-            if json instanceof Array
-                if json.length > 0
-                    schema = new JQL.Schema(json[0])
-                else if schema not instanceof JQL.Schema
-                    schema = new JQL.Schema(schema)
+    @new.fromJSON = (json, schema) ->
+        if json instanceof Array
+            if json.length > 0
+                schema = new JQL.Schema(null, json[0])
+            else if schema not instanceof JQL.Schema
+                schema = new JQL.Schema(null, schema)
 
-            records = []
-            for record in json
-                r = []
-                for col in schema.cols
-                    r.push record[col.name]
-                records.push r
+        records = []
+        for record in json
+            r = []
+            for col in schema.cols
+                r.push record[col.name]
+            records.push r
 
         table = new JQL.Table(schema, records)
+        schema.table = table
 
-        return table or null
+        return table
     @new.fromRowJSON    = @new.fromJSON
     # JSON format must be column based:
     # [
@@ -82,7 +78,7 @@ class JQL.Table
         for i in [0...maxColLength]
             records.push(col.vals[i] or null for col in cols)
 
-        return new JQL.Table(new JQL.Schema(pseudoRecord, true), records)
+        return new JQL.Table(new JQL.Schema(@, @, pseudoRecord, true), records)
     # String. INSERT INTO statements
     @new.fromSQL = (sql) ->
         sql = sql.replace /\`/g, ""
@@ -148,7 +144,7 @@ class JQL.Table
                         # console.log "prime...", colDef
 
 
-                schema = new JQL.Schema(pseudoRecord, true)
+                schema = new JQL.Schema(@, pseudoRecord, true)
 
                 if notNulls.length > 0
                     schema.setNotNulls notNulls
@@ -222,7 +218,7 @@ class JQL.Table
                     for key, val of col when not pseudoRecord[key]?
                         pseudoRecord[key] = val
 
-            @schema = new JQL.Schema(pseudoRecord, true)
+            @schema = new JQL.Schema(@, pseudoRecord, true)
             @records = []
             @name = "Table"
             @partOf = null
@@ -401,12 +397,65 @@ class JQL.Table
             @records.concat table.records
         )
 
-    join: (table, col) ->
+    innerJoin: (table, leftCol, rightCol) ->
+        if not rightCol
+            rightCol = leftCol
+
+        records = []
+        leftSchema = @schema
+        rightSchema = table.schema
+        for leftRecord in @records
+            for rightRecord in table.records
+                if leftRecord[leftSchema.nameToIdx(leftCol)] is rightRecord[rightSchema.nameToIdx(rightCol)]
+                    records.push leftRecord.concat(rightRecord)
+
+        return new JQL.Table(@schema.concat(table.schema), records)
+
+    outerJoin: (table, leftCol, rightCol) ->
+
+    leftJoin: (table, leftCol, rightCol) ->
+
+    rightJoin: (table, leftCol, rightCol) ->
+
+    fullOuterJoin: (table, leftCol, rightCol) ->
+
+    join: (table, leftCol, rightCol, type="inner") ->
+        if arguments.length is 3
+            return @innerJoin(table, leftCol, rightCol)
+
+        type = ("#{type}").toLowerCase()
+        map =
+            fullOuter:  @fullOuterJoin
+            inner:      @innerJoin
+            left:       @leftJoin
+            leftOuter:  @leftJoin
+            outer:      @outerJoin
+            right:      @rightJoin
+
+        return @[map[type]]?(table, leftCol, rightCol) or @innerJoin(table, leftCol, rightCol)
+
+    equals: (table) ->
+        if @schema.equals table.schema
+            if @records.length isnt table.record.length
+                return false
+
+            doneIndices = []
+            for record, i in table.records
+                for rRecord, j in @records when j not in doneIndices and arrEquals(record, rRecord)
+                    doneIndices.push j
+
+            return doneIndices.length is @records.length
+        return false
 
 
     set: () ->
 
     unique: () ->
+        records = []
+        for record in @records
+            for r in records when not arrEquals(record, r)
+                records.push record
+        return new JQL.Table(@schema.clone(), records)
 
     distinct: () ->
         return @unique.applu(@, arguments)
