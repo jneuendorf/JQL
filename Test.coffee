@@ -41,12 +41,36 @@ window.test = () ->
         }
     ]
 
-    arr1 = [1, true, "asdf", [1,2,3], 4]
-    arr2 = [1, true, "asdf", [1,2,3], 4]
-    arr3 = [[1,2], [3,4]]
-    console.log "comparing arrays:"
-    console.log arrEquals(arr1, arr2)
-    console.log arrEquals(arr1, arr3)
+    # arr1 = [1, true, "asdf", [1,2,3], 4]
+    # arr2 = [1, true, "asdf", [1,2,3], 4]
+    # arr3 = [[1,2], [3,4]]
+    # console.log "comparing arrays:"
+    # console.log arrEquals(arr1, arr2)
+    # console.log arrEquals(arr1, arr3)
+
+    start = Date.now()
+    @bigJql = bigJql = JQL.fromJSON bigJSON
+    end = Date.now()
+    console.log "loading time = #{end-start} ms"
+
+    start = Date.now()
+    # @bigJqlPart = bigJql.where({
+    #     lt:
+    #         id: 400
+    # }).or(bigJql.where({
+    #     gt:
+    #         id: 2400
+    # }))
+    @bigJqlPart = bigJql.where({
+        lt:
+            id: 400
+    }).and(bigJql.where({
+        lt:
+            id: 380
+    }))
+    end = Date.now()
+    console.log "query time = #{end-start} ms"
+    return
 
 
     @jql = jql = JQL.fromJSON @json

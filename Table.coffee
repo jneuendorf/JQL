@@ -13,6 +13,7 @@ class JQL.Table
         char:       "string"
         int:        "number"
         decimal:    "number"
+        date:       "date"
 
     @new: (schema, records) ->
         return new JQL.Table(schema, records)
@@ -409,13 +410,32 @@ class JQL.Table
                 if leftRecord[leftSchema.nameToIdx(leftCol)] is rightRecord[rightSchema.nameToIdx(rightCol)]
                     records.push leftRecord.concat(rightRecord)
 
-        return new JQL.Table(@schema.concat(table.schema), records)
+        return new JQL.Table(leftSchema.concat(rightSchema), records)
 
     outerJoin: (table, leftCol, rightCol) ->
 
     leftJoin: (table, leftCol, rightCol) ->
+        if not rightCol
+            rightCol = leftCol
+
+        records = []
+        leftSchema = @schema
+        rightSchema = table.schema
+        nullArray = (null for i in [0...rightSchema.cols.length])
+        for leftRecord in @records
+            matchFound = false
+            for rightRecord in table.records
+                if leftRecord[leftSchema.nameToIdx(leftCol)] is rightRecord[rightSchema.nameToIdx(rightCol)]
+                    records.push leftRecord.concat(rightRecord)
+                    matchFound = true
+
+            if not matchFound
+                records.push leftRecord.concat(nullArray)
+
+        return new JQL.Table(leftSchema.concat(rightSchema), records)
 
     rightJoin: (table, leftCol, rightCol) ->
+        return table.leftJoin(@, rightCol, leftCol)
 
     fullOuterJoin: (table, leftCol, rightCol) ->
 
@@ -431,6 +451,7 @@ class JQL.Table
             leftOuter:  @leftJoin
             outer:      @outerJoin
             right:      @rightJoin
+            rightOuter: @rightJoin
 
         return @[map[type]]?(table, leftCol, rightCol) or @innerJoin(table, leftCol, rightCol)
 
@@ -520,6 +541,17 @@ class JQL.Table
     each: (callback) ->
         for record, i in @records
             if callback(record, i) is false
+                break
+        return @
+
+    # more detailed than 'each'. cb params: record as object, index
+    each2: () ->
+        for record, i in @records
+            r = {}
+            for col, i in @schema.names
+                r[col] = record[i]
+
+            if callback(r, i) is false
                 break
         return @
 
