@@ -30,7 +30,40 @@ arrEquals = (arr1, arr2) ->
 cloneObject = (obj) ->
     return JSON.parse JSON.stringify(obj)
 
-# firstInObject = (obj) ->
-#     key = Object.key obj
-#     key = key[0]
-#     return obj[key]
+# makeAsync = (func, args...) ->
+#     #    i = 0
+#     #    records = @table.records
+#     #    deltaIdx = JQL.Schema.config.async.recordsPerCall
+#     #    delay = JQL.Schema.config.async.delay
+#     #    maxIdx = records.length
+#     #
+#     #    f = (index) ->
+#     #        console.log "async adding. index = #{index}..."
+#     #        max = index + deltaIdx
+#     #        doCallback = false
+#     #        if max > maxIdx
+#     #            max = maxIdx
+#     #            doCallback = true
+#     #
+#     #        for i in [index...max]
+#     #            records[i].push initValue
+#     #
+#     #        if not doCallback
+#     #            return window.setTimeout(
+#     #                () ->
+#     #                    return f(max)
+#     #                delay
+#     #            )
+#     #        return callback?()
+#     #
+#     #    window.setTimeout(
+#     #         () ->
+#     #             return f(0)
+#     #         0
+#     #    )
+#
+#     func = () ->
+#         for record in @table.records
+#             record.push initValue
+#
+#     return f

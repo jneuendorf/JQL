@@ -41,12 +41,7 @@ window.test = () ->
         }
     ]
 
-    # arr1 = [1, true, "asdf", [1,2,3], 4]
-    # arr2 = [1, true, "asdf", [1,2,3], 4]
-    # arr3 = [[1,2], [3,4]]
-    # console.log "comparing arrays:"
-    # console.log arrEquals(arr1, arr2)
-    # console.log arrEquals(arr1, arr3)
+
 
     start = Date.now()
     @bigJql = bigJql = JQL.fromJSON bigJSON
@@ -61,13 +56,13 @@ window.test = () ->
     #     gt:
     #         id: 2400
     # }))
-    @bigJqlPart = bigJql.where({
+    console.log @bigJqlPart = bigJql.where({
         lt:
             id: 400
     }).and(bigJql.where({
         lt:
             id: 380
-    }))
+    })).select("id", "date")
     end = Date.now()
     console.log "query time = #{end-start} ms"
     return
@@ -132,3 +127,99 @@ window.test = () ->
     return "done"
 
 test.call(window)
+
+
+
+# {
+#     "id": 692,
+#     "date": "2012-04-01",
+#     "value": 207935,
+#     "created_at": "2013-06-06 15:24:47",
+#     "updated_at": "2014-01-06 17:36:06",
+#     "detail_html": null,
+#     "detail_pic": null,
+#     "kpi_report_id": 23,
+#     "raw_row_number": null
+# }
+table = JQL.fromJSON bigJSON
+schema = table.schema
+records = table.records
+
+describe "util function", () ->
+
+    it "arrEquals", () ->
+        arr1 = [1, true, "asdf", [1,2,3], 4]
+        arr2 = [1, true, "asdf", [1,2,3], 4]
+        arr3 = [[1,2], [3,4]]
+
+        expect arrEquals(arr1, arr2)
+            .toBe true
+
+        expect arrEquals(arr1, arr3)
+            .toBe false
+
+
+describe "JQL.Schema", () ->
+
+    it "general", () ->
+        expect schema
+            .toBe table.schema
+
+        expect table
+            .toBe schema.table
+
+    it "clone and equals", () ->
+        expect schema.clone().equals(schema)
+            .toBe true
+
+    it "addColumn and query new column", () ->
+        oldNames = schema.names
+
+        expect schema.addColumn({name: "testColumn", type: "number"}).names
+            .toEqual oldNames.concat(["testColumn"])
+
+        expect table.where(id: 692).select("testColumn").col("testColumn")
+            .toEqual [null]
+
+        schema.addColumn({name: "testColumn2", type: "number", initValue: 4})
+
+        expect table.where(id: 692).select("testColumn2").col("testColumn2")
+            .toEqual [4]
+
+        schema.addColumn({name: "testColumn3", type: "number", initValue: "non-valid-value"})
+
+        expect table.where(id: 692).select("testColumn3").col("testColumn3")
+            .toEqual [null]
+
+        # stuff finished => last records should now have a different length
+        callback = () ->
+            console.log "async done!"
+            expect records[records.length - 1].length
+                .toBe 13
+            return true
+
+        schema.addColumn({name: "testColumn4", type: "number"}, true, callback)
+        expect records[records.length - 1].length
+            .toBe 12
+        console.log "after expect"
+
+
+    it "deleteColumn", () ->
+        names = (name for name in schema.names when name not in ["testColumn", "testColumn2"])
+
+        expect schema.deleteColumns("testColumn", "testColumn2").names
+            .toEqual names
+
+        expect table.where(id: 692).select("testColumn", "testColumn2").records[0]
+            .toEqual [undefined, undefined]
+
+    # it "", () ->
+    #
+    # it "", () ->
+    #
+    # it "", () ->
+    #
+    # it "", () ->
+
+
+describe "JQL.Table", () ->

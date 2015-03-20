@@ -1,7 +1,5 @@
 ###
-select (from), where
 update, set
-join
 insert (into)
 distinct
 functions: avg, sum, count, max, min, first, last
@@ -44,21 +42,13 @@ class JQL.Table
     # JSON format must be column based:
     # [
     # {
-    #     name: "col1"
-    #     type: someCrazyType   <- optional
-    #     vals: [
-    #         val11,
-    #         val12,
-    #         ...
-    #     ]
+    #     name: "col1",
+    #     type: someCrazyType,   <- optional
+    #     vals: [ val11, val12, ... ]
     # },
     # {
-    #     name: "col2"
-    #     vals: [
-    #         val21,
-    #         val22,
-    #         ...
-    #     ]
+    #     name: "col2",
+    #     vals: [val21, val22, ... ]
     # },
     # ...
     # ]
@@ -151,8 +141,8 @@ class JQL.Table
                     schema.setNotNulls notNulls
                 if autoIncrements.length > 0
                     schema.setAutoIncrements autoIncrements
-                if primaryKeys.length > 0
-                    schema.setPrimaryKeys primaryKeys
+                # if primaryKeys.length > 0
+                #     schema.setPrimaryKeys primaryKeys
 
                 tables[name] = new JQL.Table(schema, [], name)
 
@@ -198,6 +188,7 @@ class JQL.Table
     constructor: (schema, records, name="Table", partOf=null) ->
         if schema instanceof JQL.Schema
             @schema = schema
+            schema.table = @
             @records = records or []
             @name = name
             @partOf = partOf
@@ -224,6 +215,8 @@ class JQL.Table
             @name = "Table"
             @partOf = null
 
+        @history = []
+
         # create props that are just for being close to SQL
         # i.e. this.update.set ...
         Object.defineProperties @, {
@@ -237,6 +230,12 @@ class JQL.Table
 
     row: (n) ->
         return new JQL.Table(@schema, [@records[n]], @name, @)
+
+    first: () ->
+        return @row(0)
+
+    last: () ->
+        return @row(@records.length - 1)
 
     col: (n) ->
         if typeof n is "string"
@@ -348,8 +347,8 @@ class JQL.Table
         return @
 
     @::alter.deleteColumn = (colName) ->
-        @schema.deleteColumn colName
         idx = @schema.nameToIdx colName
+        @schema.deleteColumn colName
 
         for record, i in @records
             @records[i] = (col for col, j in record when j isnt idx)
@@ -373,14 +372,15 @@ class JQL.Table
     @::alter.changeColumnName = () ->
         return @alter.renameColumn.apply(@, arguments)
 
+    # make all altering methods directly accessible from JQL.Table object
+    for name, method of @::alter
+        @::[name] = method
+
     rename: (name) ->
         @name = "#{name}"
         return @
 
     and: (table) ->
-        # records = []
-        # for record in @records when record in table.records
-        #     records.push record
         # TODO: this operation is not commutative.
         # if 'this' contains 2 identical rows R and 'table' also has that row the result depends on the order:
         # this.and(table) != table.and(this)
@@ -483,7 +483,6 @@ class JQL.Table
 
     groupBy: (aggregation) ->
 
-
     # in place
     orderBy: (cols...) ->
         if cols[0] instanceof Array
@@ -540,19 +539,29 @@ class JQL.Table
 
     each: (callback) ->
         for record, i in @records
-            if callback(record, i) is false
-                break
+            break if callback(record, i) is false
         return @
 
     # more detailed than 'each'. cb params: record as object, index
-    each2: () ->
+    each2: (callback) ->
         for record, i in @records
             r = {}
-            for col, i in @schema.names
-                r[col] = record[i]
+            for col, j in @schema.names
+                r[col] = record[j]
 
-            if callback(r, i) is false
-                break
+            break if callback(r, i) is false
+        return @
+
+    each3: (callback) ->
+        for record, i in @records
+            r = []
+            for col, j in @schema.cols
+                r[j] = record[col.index]
+
+            # add current iteration index to the front of arguments
+            r.unshift i
+
+            break if callback.apply(r, r) is false
         return @
 
     # revert table to json format (inverse of fromJSON)
@@ -565,3 +574,9 @@ class JQL.Table
                 obj[map(i)] = record[i]
             res.push obj
         return res
+
+    # create (dependent on parent table(s)) (select) sql query
+    toSelectSQL: () ->
+
+    # create independent (create + insert) sql statement
+    toSQL: () ->

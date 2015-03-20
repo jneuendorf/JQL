@@ -6,6 +6,15 @@ class JQL.Schema
         boolean: false
         object: {}
 
+    @config:
+        async:
+            delay: 30 # in ms
+            recordsPerCall: 100
+
+    # TODO:
+    # NOTE: this method does NOT clone the table! It points to the same table as the given schema.
+    # Therefore this method should not be used from the outside.
+    # It should only be used by JQL.Table and only when a new JQL.Table instance is being returned (i.e. for SELECT)
     @fromSchema: (schema) ->
         result = new JQL.Schema(schema.table)
 
@@ -75,19 +84,19 @@ class JQL.Schema
                 col.autoIncrement = false
         return @
 
-    setPrimaryKeys: (cols...) ->
-        if cols[0] instanceof Array
-            cols = cols[0]
-
-        for col in @cols
-            if col.name in cols
-                col.prime = true
-            else if col.prime
-                col.prime = false
-        return @
-
-    setPrimes: () ->
-        return @setPrimaryKeys.apply(@, arguments)
+    # setPrimaryKeys: (cols...) ->
+    #     if cols[0] instanceof Array
+    #         cols = cols[0]
+    #
+    #     for col in @cols
+    #         if col.name in cols
+    #             col.prime = true
+    #         else if col.prime
+    #             col.prime = false
+    #     return @
+    #
+    # setPrimes: () ->
+    #     return @setPrimaryKeys.apply(@, arguments)
 
     # resetOptions: () ->
     #     for col in @cols
@@ -115,8 +124,6 @@ class JQL.Schema
         return JQL.Schema.fromSchema(@)
 
     and: (schema) ->
-        result = @clone()
-
         # kick out the columns that are not in 'schema'
         indicesToRemove = []
         for name, i in @names when schema.nameToIdx(name) < 0
@@ -124,48 +131,105 @@ class JQL.Schema
 
         @cols = (col for col, i in @cols when i not in indicesToRemove)
         @_updateData()
-
-        return result
+        return @
 
     or: (schema) ->
 
     concat: (schema) ->
-        result = @clone()
         # update column names
-        cols = result.cols
-        for col, i in cols when "." not in col.name
+        for col, i in @cols when "." not in col.name
             console.log col
-            cols[i].name = "#{@table.name}.#{col.name}"
+            @cols[i].name = "#{@table.name}.#{col.name}"
         # update column names
-        cols = schema.cols
-        for col, i in cols when "." not in col.name
+        for col, i in schema.cols when "." not in col.name
             console.log col
-            cols[i].name = "#{schema.table.name}.#{col.name}"
+            schema.cols[i].name = "#{schema.table.name}.#{col.name}"
 
-        result.cols = result.cols.concat schema.cols
-        result._updateData()
-        return result
+        @cols = @cols.concat schema.cols
+        @_updateData()
+        return @
 
     join: () ->
         return @concat.apply(@, arguments)
 
-    addColumn: (col) ->
+    ###*
+    * @method addColumn
+    * @param column {Object}
+    * @param async {Boolean}
+    * Optional. Default is 'false'. If set to 'true' appending the initial value to the table records is done asynchronously. Recommended for very tables with many records.
+    * @param callback {Function}
+    * Optional. If passed and the 'async' parameter is 'true' the callback will be executed after all records have been changed.
+    *###
+    addColumn: (col, async=false, callback) ->
         colData =
             name:           col.name
             index:          @cols.length
-            type:           col.type
+            type:           col.type.toLowerCase()
             notNull:        col.notNull or false
             autoIncrement:  col.autoIncrement or false
             prime:          col.prime or col.primaryKey or false
 
         @cols.push colData
+        @_updateData()
+
+        initValue = col.initValue
+        if col.initValue is undefined
+            initValue = null
+
+        if initValue? and typeof initValue isnt colData.type
+            console.warn "Initial value '#{initValue}' (#{typeof initValue}) does not match column type '#{colData.type}'! Falling back to 'null'."
+            initValue = null
+
+        if not async
+            for record in @table.records
+                record.push initValue
+        else
+            i = 0
+            records = @table.records
+            deltaIdx = JQL.Schema.config.async.recordsPerCall
+            delay = JQL.Schema.config.async.delay
+            maxIdx = records.length
+
+            f = (index) ->
+                console.log "async adding. index = #{index}..."
+                max = index + deltaIdx
+                doCallback = false
+                if max > maxIdx
+                    max = maxIdx
+                    doCallback = true
+
+                for i in [index...max]
+                    records[i].push initValue
+
+                if not doCallback
+                    return window.setTimeout(
+                        () ->
+                            return f(max)
+                        delay
+                    )
+                return callback?()
+
+            window.setTimeout(
+                 () ->
+                     return f(0)
+                 0
+            )
+
         return @
 
-    deleteColumn: (name) ->
-        idx = @nameToIdx name
-        @cols = (col for col, i in @cols when i isnt idx)
+    deleteColumn: (names...) ->
+        indices = []
+        for name in names
+            indices.push @nameToIdx(name)
+        @cols = (col for col, i in @cols when i not in indices)
         @_updateData()
+
+        # TODO: delete columns from records
+
         return @
+
+    deleteColumns: () ->
+        return @deleteColumn.apply(@, arguments)
 
     renameColumn: (oldName, newName) ->
         @cols[@nameToIdx(oldName)].name = newName
@@ -180,11 +244,6 @@ class JQL.Schema
     renameColumn = (oldName, newName) ->
         @schema.renameColumn oldName, newName
         return @
-
-    colNamed: (name) ->
-        for col in @cols when col.name is name
-            return col
-        return null
 
     equals: (schema) ->
         if (l = @cols.length) is schema.cols.length
