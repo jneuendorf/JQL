@@ -41,13 +41,6 @@ window.test = () ->
         }
     ]
 
-
-
-    start = Date.now()
-    @bigJql = bigJql = JQL.fromJSON bigJSON
-    end = Date.now()
-    console.log "loading time = #{end-start} ms"
-
     start = Date.now()
     # @bigJqlPart = bigJql.where({
     #     lt:
@@ -71,8 +64,8 @@ window.test = () ->
     @jql = jql = JQL.fromJSON @json
     @jql2 = jql2 = JQL.fromJSON @json2
     @colJql = colJql = JQL.new.fromColJSON @colJson
-    jql.name = "A"
-    jql2.name = "B"
+    # jql.name = "A"
+    # jql2.name = "B"
     console.log jql
 
     # console.log jql.where {
@@ -112,8 +105,6 @@ window.test = () ->
 
     # console.log t1.schema.equals(t2.schema) and t2.schema.equals(t3.schema)
 
-    # console.log colJql
-
     @sqlJql = JQL.new.fromSQL """CREATE TABLE users (
         id INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,
         username VARCHAR(16) NOT NULL,
@@ -126,8 +117,7 @@ window.test = () ->
 
     return "done"
 
-test.call(window)
-
+# test.call(window)
 
 
 # {
@@ -141,11 +131,17 @@ test.call(window)
 #     "kpi_report_id": 23,
 #     "raw_row_number": null
 # }
-table = JQL.fromJSON bigJSON
+start = Date.now()
+table = JQL.fromJSON bigJSON, "bigTable"
+loadingTime = Date.now() - start
 schema = table.schema
 records = table.records
 
-describe "util function", () ->
+describe "miscellaneous", () ->
+
+    it "loading big data", () ->
+        expect loadingTime
+            .toBeLessThan 500
 
     it "arrEquals", () ->
         arr1 = [1, true, "asdf", [1,2,3], 4]
@@ -160,13 +156,6 @@ describe "util function", () ->
 
 
 describe "JQL.Schema", () ->
-
-    it "general", () ->
-        expect schema
-            .toBe table.schema
-
-        expect table
-            .toBe schema.table
 
     it "clone and equals", () ->
         expect schema.clone().equals(schema)
@@ -210,8 +199,14 @@ describe "JQL.Schema", () ->
         expect schema.deleteColumns("testColumn", "testColumn2").names
             .toEqual names
 
-        expect table.where(id: 692).select("testColumn", "testColumn2").records[0]
-            .toEqual [undefined, undefined]
+        expect schema.at("testColumn")
+            .toBe null
+
+
+        console.log table.where(id: 692).select("testColumn", "testColumn2")
+
+        expect table.where(id: 692).select("testColumn", "testColumn2").records
+            .toEqual [[]]
 
     # it "", () ->
     #
@@ -223,3 +218,47 @@ describe "JQL.Schema", () ->
 
 
 describe "JQL.Table", () ->
+
+    it "constructor", () ->
+        expect schema
+            .toBe table.schema
+
+        expect table
+            .toBe schema.table
+
+        expect table.name
+            .toBe "bigTable"
+
+        colJson = [
+            {
+                name: "col1"
+                type: "testType"
+                vals: [
+                    "val11"
+                    "val12"
+                ]
+            }
+            {
+                name: "col2"
+                vals: [
+                    1
+                    2
+                ]
+            }
+        ]
+        table2 = JQL.fromColJSON colJson
+
+        expect table2.schema.names
+            .toEqual ["col1", "col2"]
+
+        expect table2.schema.types
+            .toEqual ["testType", "number"]
+
+        expect table2.records[0]
+            .toEqual ["val11", 1]
+
+
+
+    it "where", () ->
+        expect table.where(lt: id: 400).records.length
+            .toBe 25

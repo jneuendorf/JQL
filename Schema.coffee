@@ -261,6 +261,13 @@ class JQL.Schema
             return true
         return false
 
+    at: (param) ->
+        if typeof param is "string"
+            idx = @nameToIdx param
+        else
+            idx = param
+        return @cols[idx] or null
+
     nameToIdx: (name) ->
         return @names.indexOf name
 

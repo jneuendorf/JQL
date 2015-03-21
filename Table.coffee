@@ -15,17 +15,17 @@ class JQL.Table
 
     @new: (schema, records) ->
         return new JQL.Table(schema, records)
+
     # JSON format must be record based:
     # [
     #     {col1: 1, col2: 2},
     #     ...
     # ]
-    @new.fromJSON = (json, schema) ->
-        if json instanceof Array
-            if json.length > 0
-                schema = new JQL.Schema(null, json[0])
-            else if schema not instanceof JQL.Schema
-                schema = new JQL.Schema(null, schema)
+    @new.fromJSON = (json, name) ->
+        if json not instanceof Array
+            return null
+
+        schema = new JQL.Schema(null, json[0])
 
         records = []
         for record in json
@@ -34,7 +34,7 @@ class JQL.Table
                 r.push record[col.name]
             records.push r
 
-        table = new JQL.Table(schema, records)
+        table = new JQL.Table(schema, records, name, null)
         schema.table = table
 
         return table
@@ -69,7 +69,7 @@ class JQL.Table
         for i in [0...maxColLength]
             records.push(col.vals[i] or null for col in cols)
 
-        return new JQL.Table(new JQL.Schema(@, @, pseudoRecord, true), records)
+        return new JQL.Table(new JQL.Schema(@, pseudoRecord, true), records)
     # String. INSERT INTO statements
     @new.fromSQL = (sql) ->
         sql = sql.replace /\`/g, ""
@@ -249,7 +249,7 @@ class JQL.Table
     select: (cols...) ->
         # select all columns
         if not cols? or cols[0] is "*"
-            return @
+            return @clone()
 
         # select not all columns => projection
         schema = @schema.clone()
@@ -262,7 +262,7 @@ class JQL.Table
 
         schema.cols = (col for col, i in schema.cols when col.index in indicesToKeep)
         schema._updateData()
-        return new JQL.Table(schema, records, @name, @)
+        return new JQL.Table(schema, records, "#{@name}.select", @)
 
     project: () ->
         return @select.apply(@, arguments)
