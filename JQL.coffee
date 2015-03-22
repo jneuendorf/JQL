@@ -30,6 +30,14 @@ arrEquals = (arr1, arr2) ->
 cloneObject = (obj) ->
     return JSON.parse JSON.stringify(obj)
 
+padNum = (num, digits) ->
+    if typeof num is "number"
+        num = "#{num}"
+    len = num.length
+    for i in [0...(digits - len)]
+        num = "0#{num}"
+    return num
+
 # makeAsync = (func, args...) ->
 #     #    i = 0
 #     #    records = @table.records

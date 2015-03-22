@@ -105,13 +105,7 @@ window.test = () ->
 
     # console.log t1.schema.equals(t2.schema) and t2.schema.equals(t3.schema)
 
-    @sqlJql = JQL.new.fromSQL """CREATE TABLE users (
-        id INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,
-        username VARCHAR(16) NOT NULL,
-        password DECIMAL (18, 2) NOT NULL,
-        PRIMARY KEY ( id,b)
-    );
-    INSERT INTO users VALUES (1,2,3), (4,5,6);"""
+
 
     console.log jql.join(jql2, "a", "y")
 
@@ -153,6 +147,19 @@ describe "miscellaneous", () ->
 
         expect arrEquals(arr1, arr3)
             .toBe false
+
+    it "padNum", () ->
+        expect padNum(3, 2)
+            .toBe "03"
+
+        expect padNum("03", 3)
+            .toBe "003"
+
+        expect padNum("33", 2)
+            .toBe "33"
+
+        expect padNum(333, 5)
+            .toBe "00333"
 
 
 describe "JQL.Schema", () ->
@@ -229,6 +236,7 @@ describe "JQL.Table", () ->
         expect table.name
             .toBe "bigTable"
 
+    it "fromColJSON", () ->
         colJson = [
             {
                 name: "col1"
@@ -257,7 +265,47 @@ describe "JQL.Table", () ->
         expect table2.records[0]
             .toEqual ["val11", 1]
 
+    it "fromSQL", () ->
+        table2 = JQL.new.fromSQL """CREATE TABLE users (
+            id INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,
+            username VARCHAR(16) NOT NULL,
+            password DECIMAL (18, 2) NOT NULL,
+            PRIMARY KEY ( id,b)
+        );
+        INSERT INTO users VALUES (1,2,3), (4,5,6);"""
 
+        expect Object.keys(table2)
+            .toEqual ["users"]
+
+        table2 = table2.users
+
+        expect table2.name
+            .toBe "users"
+
+        console.log table2
+
+        expect table2.schema.names
+            .toEqual ["id", "username", "password"]
+
+        expect table2.records
+            .toEqual [
+                [1,"2",3]
+                [4,"5",6]
+            ]
+
+    it "type conversion", () ->
+        funcSet = JQL.Table.typeConversion
+        expect funcSet.datToStr(new Date("2015-02-02"))
+            .toBe "2015-02-02 01:00:00"
+
+        expect funcSet.strToDat("2015-02-02").getTime()
+            .toBe (new Date(2015, 1, 2)).getTime()
+
+        expect funcSet.strToNum(funcSet.numToStr(123.456))
+            .toBe 123.456
+
+        expect funcSet.datToNum(funcSet.numToDat(1427040298501))
+            .toBe 1427040298501
 
     it "where", () ->
         expect table.where(lt: id: 400).records.length

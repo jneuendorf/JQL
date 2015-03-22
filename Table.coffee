@@ -13,6 +13,46 @@ class JQL.Table
         decimal:    "number"
         date:       "date"
 
+    @typeConversion =
+        strToNum: (str) ->
+            return parseFloat(str)
+        numToStr: (num) ->
+            return "#{num}"
+        numToDat: (num) ->
+            return new Date(num)
+        datToNum: (date) ->
+            return date.getTime()
+        strToDat: (str) ->
+            str = str.split /\D/g
+            data = []
+            for d, i in str
+                d = parseInt(d, 10)
+                if i is 1
+                    d--
+                data.push d
+
+            # NOTE: the date constructor creates invalid dates when undefined is passed as argument
+            # TODO: is there no better way?
+            lookupTable = [
+                null
+                (args) ->
+                    return new Date(args[0])
+                (args) ->
+                    return new Date(args[0], args[1])
+                (args) ->
+                    return new Date(args[0], args[1], args[2])
+                (args) ->
+                    return new Date(args[0], args[1], args[2], args[3])
+                (args) ->
+                    return new Date(args[0], args[1], args[2], args[3], args[4])
+                (args) ->
+                    return new Date(args[0], args[1], args[2], args[3], args[4], args[5])
+            ]
+            return lookupTable[data.length](data)
+        datToStr: (date) ->
+            return "#{date.getFullYear()}-#{padNum(date.getMonth() + 1, 2)}-#{padNum(date.getDate(), 2)} #{padNum(date.getHours(), 2)}:#{padNum(date.getMinutes(), 2)}:#{padNum(date.getSeconds(), 2)}"
+
+
     @new: (schema, records) ->
         return new JQL.Table(schema, records)
 
@@ -39,6 +79,7 @@ class JQL.Table
 
         return table
     @new.fromRowJSON    = @new.fromJSON
+
     # JSON format must be column based:
     # [
     # {
@@ -146,7 +187,7 @@ class JQL.Table
 
                 tables[name] = new JQL.Table(schema, [], name)
 
-
+            # INSERT INTO statements
             if (matches = sql.match insertRegex)?
 
                 for match in matches
@@ -162,7 +203,7 @@ class JQL.Table
                     # add values to existing table
                     if (table = tables[name])?
                         records = []
-                        for value in values
+                        for value, i in values
                             value = value
                                 .replace /\s+/g, ""
                                 .slice(value.indexOf("(") + 1, value.indexOf(")"))
@@ -506,10 +547,16 @@ class JQL.Table
             records = records[0]
 
         for record in records
+            types = @schema.types
             if record instanceof Array
+                for col, i in record when typeof col isnt types[i]
+                    type = types[i]
+                    funcName = "#{(typeof col).slice(0,3)}To#{type[0].toUpperCase()}#{type.slice(1, 3)}"
+                    record[i] = JQL.Table.typeConversion[funcName](col)
+                    console.warn "JQL.Table::insert: type of '#{col}' (#{i + 1}th column) does not match '#{type}'. Converting to '#{record[i]}' (type: '#{type}')."
+
                 @records.push record
             else
-                # TODO: check primary (if set)?!
                 r = []
                 for name in @schema.names
                     r.push record[name]
@@ -518,7 +565,7 @@ class JQL.Table
 
     delete: (param) ->
         # child (= subset) table given
-        if param instanceof JQT.Table
+        if param instanceof JQL.Table
             child = param
             incidesToRemove = []
             for childRecord in param.records
