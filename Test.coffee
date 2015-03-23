@@ -1,47 +1,4 @@
 window.test = () ->
-    @json = [
-        {
-            id: 0
-            a: 10
-            b: "20"
-            c: true
-        }
-        {
-            id: 1
-            a: -1
-            b: "jim"
-            c: false
-        }
-    ]
-    @json2 = [
-        {
-            x: 1
-            y: 34
-        }
-        {
-            x: 0
-            y: 10
-        }
-    ]
-    @colJson = [
-        {
-            name: "col1"
-            type: "testType"
-            vals: [
-                "val11"
-                "val12"
-            ]
-        }
-        {
-            name: "col2"
-            vals: [
-                "val21"
-                "val22"
-            ]
-        }
-    ]
-
-    start = Date.now()
     # @bigJqlPart = bigJql.where({
     #     lt:
     #         id: 400
@@ -56,63 +13,14 @@ window.test = () ->
         lt:
             id: 380
     })).select("id", "date")
-    end = Date.now()
-    console.log "query time = #{end-start} ms"
-    return
-
 
     @jql = jql = JQL.fromJSON @json
     @jql2 = jql2 = JQL.fromJSON @json2
-    @colJql = colJql = JQL.new.fromColJSON @colJson
-    # jql.name = "A"
-    # jql2.name = "B"
-    console.log jql
-
-    # console.log jql.where {
-    #     id: 1
-    # }
-    #
-    # console.log jql.where {
-    #     lt:
-    #         a: 13
-    #         b: "a"
-    # }
-    #
-    # console.log jql.where {
-    #     a: 10
-    #     c: true
-    # }
-
-    # console.log jql.row(1).toJSON()
-    #
-    # console.log jql.col "b"
 
     console.log jql.select("id", "b").where(a: 10)
     console.log jql.where(a: 10).select("id", "b")
 
-
-    t1 = new JQL.Table(["id", "number", "text", "string", "img", "string"])
-    t2 = new JQL.Table(
-        {id: "number"}
-        {text: "string"}
-        {img: "string"}
-    )
-    t3 = new JQL.Table(
-        id: "number"
-        text: "string"
-        img: "string"
-    )
-
-    # console.log t1.schema.equals(t2.schema) and t2.schema.equals(t3.schema)
-
-
-
-    console.log jql.join(jql2, "a", "y")
-
     return "done"
-
-# test.call(window)
-
 
 # {
 #     "id": 692,
@@ -125,18 +33,21 @@ window.test = () ->
 #     "kpi_report_id": 23,
 #     "raw_row_number": null
 # }
-start = Date.now()
-table = JQL.fromJSON bigJSON, "bigTable"
-loadingTime = Date.now() - start
-schema = table.schema
-records = table.records
-
+##################################################################################################################
+##################################################################################################################
 describe "miscellaneous", () ->
+
+    start = Date.now()
+    table = JQL.fromJSON bigJSON, "bigTable"
+    loadingTime = Date.now() - start
+    schema = table.schema
+    records = table.records
 
     it "loading big data", () ->
         expect loadingTime
             .toBeLessThan 500
 
+    ##############################################################################################################
     it "arrEquals", () ->
         arr1 = [1, true, "asdf", [1,2,3], 4]
         arr2 = [1, true, "asdf", [1,2,3], 4]
@@ -148,6 +59,7 @@ describe "miscellaneous", () ->
         expect arrEquals(arr1, arr3)
             .toBe false
 
+    ##############################################################################################################
     it "padNum", () ->
         expect padNum(3, 2)
             .toBe "03"
@@ -158,16 +70,38 @@ describe "miscellaneous", () ->
         expect padNum("33", 2)
             .toBe "33"
 
+        expect padNum("33", 1)
+            .toBe "33"
+
         expect padNum(333, 5)
             .toBe "00333"
 
+        expect padNum(33.34, 5)
+            .toBe "00033.34"
 
+        expect padNum("33.34", 5)
+            .toBe "00033.34"
+
+        expect padNum(33.345, 2)
+            .toBe "33.345"
+
+        expect padNum(33.345, 1)
+            .toBe "33.345"
+
+
+##################################################################################################################
+##################################################################################################################
 describe "JQL.Schema", () ->
+
+    table = JQL.fromJSON bigJSON, "bigTable"
+    schema = table.schema
+    records = table.records
 
     it "clone and equals", () ->
         expect schema.clone().equals(schema)
             .toBe true
 
+    ##############################################################################################################
     it "addColumn and query new column", () ->
         oldNames = schema.names
 
@@ -189,17 +123,20 @@ describe "JQL.Schema", () ->
 
         # stuff finished => last records should now have a different length
         callback = () ->
-            console.log "async done!"
-            expect records[records.length - 1].length
-                .toBe 13
+            try
+                expect records[records.length - 1].length
+                    .toBe 13
+            catch error
+                console.warn error.message
+            console.log "async done....."
             return true
 
         schema.addColumn({name: "testColumn4", type: "number"}, true, callback)
+        console.log "async starting...."
         expect records[records.length - 1].length
             .toBe 12
-        console.log "after expect"
 
-
+    ##############################################################################################################
     it "deleteColumn", () ->
         names = (name for name in schema.names when name not in ["testColumn", "testColumn2"])
 
@@ -215,18 +152,16 @@ describe "JQL.Schema", () ->
         expect table.where(id: 692).select("testColumn", "testColumn2").records
             .toEqual [[]]
 
-    # it "", () ->
-    #
-    # it "", () ->
-    #
-    # it "", () ->
-    #
-    # it "", () ->
 
-
+##################################################################################################################
+##################################################################################################################
 describe "JQL.Table", () ->
 
-    it "constructor", () ->
+    table = JQL.fromJSON bigJSON, "bigTable"
+    schema = table.schema
+    records = table.records
+
+    it "fromJSON", () ->
         expect schema
             .toBe table.schema
 
@@ -236,6 +171,7 @@ describe "JQL.Table", () ->
         expect table.name
             .toBe "bigTable"
 
+    ##############################################################################################################
     it "fromColJSON", () ->
         colJson = [
             {
@@ -265,6 +201,7 @@ describe "JQL.Table", () ->
         expect table2.records[0]
             .toEqual ["val11", 1]
 
+    ##############################################################################################################
     it "fromSQL", () ->
         table2 = JQL.new.fromSQL """CREATE TABLE users (
             id INT(8) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -282,8 +219,6 @@ describe "JQL.Table", () ->
         expect table2.name
             .toBe "users"
 
-        console.log table2
-
         expect table2.schema.names
             .toEqual ["id", "username", "password"]
 
@@ -293,6 +228,19 @@ describe "JQL.Table", () ->
                 [4,"5",6]
             ]
 
+    ##############################################################################################################
+    it "constructor", () ->
+        t1 = new JQL.Table(["id", "number", "text", "string", "img", "string"])
+        t2 = new JQL.Table(
+            id: "number"
+            text: "string"
+            img: "string"
+        )
+
+        expect t1.schema.cols
+            .toEqual t2.schema.cols
+
+    ##############################################################################################################
     it "type conversion", () ->
         funcSet = JQL.Table.typeConversion
         expect funcSet.datToStr(new Date("2015-02-02"))
@@ -307,6 +255,53 @@ describe "JQL.Table", () ->
         expect funcSet.datToNum(funcSet.numToDat(1427040298501))
             .toBe 1427040298501
 
+    ##############################################################################################################
     it "where", () ->
         expect table.where(lt: id: 400).records.length
             .toBe 25
+
+    it "row", () ->
+        expect table.row(0).records[0]
+            .toEqual [
+                375
+                "2012-01-01"
+                95800
+                "2013-06-06 15:24:35"
+                "2014-01-06 17:36:02"
+                null
+                null
+                1
+                null
+            ]
+
+    it "col", () ->
+        expect table.col "id"
+            .toEqual (rec.id for rec in bigJSON)
+
+    it "firstRaw", () ->
+        expect table.firstRaw()
+            .toEqual [
+                375
+                "2012-01-01"
+                95800
+                "2013-06-06 15:24:35"
+                "2014-01-06 17:36:02"
+                null
+                null
+                1
+                null
+            ]
+
+    it "toJSON", () ->
+        expect table.row(0).toJSON()
+            .toEqual [{
+                "id": 375,
+                "date": "2012-01-01",
+                "value": 95800,
+                "created_at": "2013-06-06 15:24:35",
+                "updated_at": "2014-01-06 17:36:02",
+                "detail_html": null,
+                "detail_pic": null,
+                "kpi_report_id": 1,
+                "raw_row_number": null
+            }]

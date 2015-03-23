@@ -6,11 +6,6 @@ class JQL.Schema
         boolean: false
         object: {}
 
-    @config:
-        async:
-            delay: 30 # in ms
-            recordsPerCall: 100
-
     # TODO:
     # NOTE: this method does NOT clone the table! It points to the same table as the given schema.
     # Therefore this method should not be used from the outside.
@@ -186,12 +181,12 @@ class JQL.Schema
         else
             i = 0
             records = @table.records
-            deltaIdx = JQL.Schema.config.async.recordsPerCall
-            delay = JQL.Schema.config.async.delay
+            deltaIdx = JQL.config.async.recordsPerCall
+            delay = JQL.config.async.delay
             maxIdx = records.length
 
             f = (index) ->
-                console.log "async adding. index = #{index}..."
+                # console.log "async adding. index = #{index}..."
                 max = index + deltaIdx
                 doCallback = false
                 if max > maxIdx

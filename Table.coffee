@@ -244,12 +244,13 @@ class JQL.Table
             # object of name-type pairs
             else if arguments.length is 1
                 pseudoRecord = schema
-            # 1 object for each column, each being a name-type pair
             else
-                cols = toArr arguments
-                for col in cols
-                    for key, val of col when not pseudoRecord[key]?
-                        pseudoRecord[key] = val
+                console.warn "Invalid arguments passed:", arguments
+                # 1 object for each column, each being a name-type pair
+                # cols = toArr arguments
+                # for col in cols
+                #     for key, val of col when not pseudoRecord[key]?
+                #         pseudoRecord[key] = val
 
             @schema = new JQL.Schema(@, pseudoRecord, true)
             @records = []
@@ -275,8 +276,14 @@ class JQL.Table
     first: () ->
         return @row(0)
 
+    firstRaw: () ->
+        return @records[0]
+
     last: () ->
         return @row(@records.length - 1)
+
+    lastRaw: () ->
+        return @record[@records.length - 1]
 
     col: (n) ->
         if typeof n is "string"
@@ -553,7 +560,7 @@ class JQL.Table
                     type = types[i]
                     funcName = "#{(typeof col).slice(0,3)}To#{type[0].toUpperCase()}#{type.slice(1, 3)}"
                     record[i] = JQL.Table.typeConversion[funcName](col)
-                    console.warn "JQL.Table::insert: type of '#{col}' (#{i + 1}th column) does not match '#{type}'. Converting to '#{record[i]}' (type: '#{type}')."
+                    console.warn "JQL.Table::insert: type of '#{col}' (#{typeof col}, #{i + 1}th column) does not match '#{type}'. Converting to '#{record[i]}' (type: '#{type}')."
 
                 @records.push record
             else

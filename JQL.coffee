@@ -5,6 +5,9 @@ JQL =
             # new JQL.Table({a: number, b: number}).where({c: 4})
             # possible values: ignore, error,
             invalidKeyBehavior: "ignore"
+        async:
+            delay: 20 # in ms
+            recordsPerCall: 10000
 
 getSelf = () ->
     return @
@@ -33,9 +36,14 @@ cloneObject = (obj) ->
 padNum = (num, digits) ->
     if typeof num is "number"
         num = "#{num}"
+
     len = num.length
-    for i in [0...(digits - len)]
-        num = "0#{num}"
+    if (idx = num.indexOf ".") >= 0
+        len = idx
+
+    if digits > len
+        for i in [0...(digits - len)]
+            num = "0#{num}"
     return num
 
 # makeAsync = (func, args...) ->
