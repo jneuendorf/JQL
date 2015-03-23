@@ -4313,28 +4313,6 @@
 
   window.test = function() {
     var jql, jql2;
-    this.json = [
-      {
-        id: 0,
-        a: 10,
-        b: "20",
-        c: true
-      }, {
-        id: 1,
-        a: -1,
-        b: "jim",
-        c: false
-      }
-    ];
-    this.json2 = [
-      {
-        x: 1,
-        y: 34
-      }, {
-        x: 0,
-        y: 10
-      }
-    ];
     console.log(this.bigJqlPart = bigJql.where({
       lt: {
         id: 400
