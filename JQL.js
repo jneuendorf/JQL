@@ -61,10 +61,10 @@
       "value": 84144,
       "created_at": "2013-06-06 15:24:35",
       "updated_at": "2014-01-06 17:36:02",
-      "detail_html": null,
-      "detail_pic": null,
+      "detail_html": "<div />",
+      "detail_pic": "base64",
       "kpi_report_id": 1,
-      "raw_row_number": null
+      "raw_row_number": 123
     }, {
       "id": 381,
       "date": "2012-07-01",
@@ -3067,6 +3067,11 @@
         delay: 20,
         recordsPerCall: 10000
       }
+    },
+    sum: function(col) {
+      return function() {
+        return true;
+      };
     }
   };
 
@@ -3706,6 +3711,15 @@
       return JQL.Table["new"].fromTable(this);
     };
 
+    Table.prototype.at = function(row, colName) {
+      var ref;
+      if (colName == null) {
+        colName = row;
+        row = 0;
+      }
+      return ((ref = this.records[row]) != null ? ref[this.schema.nameToIdx(colName)] : void 0) || void 0;
+    };
+
     Table.prototype.row = function(n) {
       return new JQL.Table(this.schema, [this.records[n]], this.name, this);
     };
@@ -3744,23 +3758,12 @@
     };
 
     Table.prototype.select = function() {
-      var col, cols, i, indicesToKeep, len1, m, record, records, ref, schema;
+      var c, col, cols, i, len1, len2, m, o, record, records, ref, schema;
       cols = 1 <= arguments.length ? slice.call(arguments, 0) : [];
       if ((cols == null) || cols[0] === "*") {
         return this.clone();
       }
-      schema = this.schema.clone();
-      indicesToKeep = (function() {
-        var len1, m, results;
-        results = [];
-        for (m = 0, len1 = cols.length; m < len1; m++) {
-          col = cols[m];
-          if (indexOf.call(schema.names, col) >= 0) {
-            results.push(schema.nameToIdx(col));
-          }
-        }
-        return results;
-      })();
+      schema = this.schema;
       records = [];
       ref = this.records;
       for (m = 0, len1 = ref.length; m < len1; m++) {
@@ -3768,33 +3771,65 @@
         records.push((function() {
           var len2, o, results;
           results = [];
-          for (i = o = 0, len2 = record.length; o < len2; i = ++o) {
-            col = record[i];
-            if (indexOf.call(indicesToKeep, i) >= 0) {
-              results.push(col);
-            }
+          for (o = 0, len2 = cols.length; o < len2; o++) {
+            col = cols[o];
+            results.push(record[schema.nameToIdx(col)]);
           }
           return results;
         })());
       }
-      schema.cols = (function() {
-        var len2, o, ref1, ref2, results;
-        ref1 = schema.cols;
-        results = [];
-        for (i = o = 0, len2 = ref1.length; o < len2; i = ++o) {
-          col = ref1[i];
-          if (ref2 = col.index, indexOf.call(indicesToKeep, ref2) >= 0) {
-            results.push(col);
-          }
-        }
-        return results;
-      })();
+      schema = new JQL.Schema();
+      for (i = o = 0, len2 = cols.length; o < len2; i = ++o) {
+        col = cols[i];
+        c = this.schema.cols[this.schema.nameToIdx(col)];
+        c.index = i;
+        schema.cols.push(c);
+      }
       schema._updateData();
       return new JQL.Table(schema, records, this.name + ".select", this);
     };
 
     Table.prototype.project = function() {
       return this.select.apply(this, arguments);
+    };
+
+    Table.prototype.count = function() {
+      var col, cols, idx, indices, len1, len2, m, num, o, record, ref, valid;
+      cols = 1 <= arguments.length ? slice.call(arguments, 0) : [];
+      if (cols[0] instanceof Array) {
+        cols = cols[0];
+      }
+      if (cols[0] === "*" || (cols[0] == null)) {
+        return this.records.length;
+      }
+      num = 0;
+      indices = (function() {
+        var len1, m, results;
+        results = [];
+        for (m = 0, len1 = cols.length; m < len1; m++) {
+          col = cols[m];
+          results.push(this.schema.nameToIdx(col));
+        }
+        return results;
+      }).call(this);
+      console.log(indices);
+      ref = this.records;
+      for (m = 0, len1 = ref.length; m < len1; m++) {
+        record = ref[m];
+        valid = true;
+        for (o = 0, len2 = indices.length; o < len2; o++) {
+          idx = indices[o];
+          if (!(record[idx] == null)) {
+            continue;
+          }
+          valid = false;
+          break;
+        }
+        if (valid) {
+          num++;
+        }
+      }
+      return num;
     };
 
     Table.prototype.where = function(predicate) {
@@ -4082,7 +4117,7 @@
     Table.prototype.equals = function(table) {
       var doneIndices, i, j, len1, len2, m, o, rRecord, record, ref1, ref2;
       if (this.schema.equals(table.schema)) {
-        if (this.records.length !== table.record.length) {
+        if (this.records.length !== table.records.length) {
           return false;
         }
         doneIndices = [];
@@ -4105,26 +4140,48 @@
     Table.prototype.set = function() {};
 
     Table.prototype.unique = function() {
-      var len1, len2, m, o, r, record, records, ref1;
-      records = [];
+      var isDuplicate, len1, len2, m, o, record, ref1, uniqueRecord, uniqueRecords;
+      uniqueRecords = [];
       ref1 = this.records;
       for (m = 0, len1 = ref1.length; m < len1; m++) {
         record = ref1[m];
-        for (o = 0, len2 = records.length; o < len2; o++) {
-          r = records[o];
-          if (!arrEquals(record, r)) {
-            records.push(record);
+        isDuplicate = false;
+        for (o = 0, len2 = uniqueRecords.length; o < len2; o++) {
+          uniqueRecord = uniqueRecords[o];
+          if (!(arrEquals(record, uniqueRecord))) {
+            continue;
           }
+          isDuplicate = true;
+          break;
+        }
+        if (!isDuplicate) {
+          uniqueRecords.push(record);
         }
       }
-      return new JQL.Table(this.schema.clone(), records);
+      return new JQL.Table(this.schema.clone(), uniqueRecords);
     };
 
     Table.prototype.distinct = function() {
-      return this.unique.applu(this, arguments);
+      return this.unique.apply(this, arguments);
     };
 
-    Table.prototype.groupBy = function(aggregation) {};
+    Table.prototype.groupBy = function(col, aggregation) {
+      var acc, aggrCol, dict, len1, m, record, ref1, val;
+      dict = {};
+      aggrCol = aggregation.col;
+      acc = null;
+      ref1 = this.records;
+      for (m = 0, len1 = ref1.length; m < len1; m++) {
+        record = ref1[m];
+        val = record[this.schema.nameToIdx(col)];
+        if (dict[val] == null) {
+          dict[val] = record[this.schema.nameToIdx(aggrCol)];
+        } else {
+          dict[val] += record[this.schema.nameToIdx(aggrCol)];
+        }
+      }
+      return new JQL.Table();
+    };
 
     Table.prototype.orderBy = function() {
       var cols, schema;
@@ -4153,7 +4210,7 @@
     Table.prototype.insert = function() {
       var col, funcName, i, len1, len2, len3, m, o, p, r, record, records, ref1, type, types;
       records = 1 <= arguments.length ? slice.call(arguments, 0) : [];
-      if (records[0] instanceof Array) {
+      if (records instanceof Array && records[0] instanceof Array && records[0][0] instanceof Array) {
         records = records[0];
       }
       for (m = 0, len1 = records.length; m < len1; m++) {
@@ -4311,33 +4368,12 @@
 
   JQL.fromSQL = JQL["new"].fromSQL;
 
-  window.test = function() {
-    var jql, jql2;
-    console.log(this.bigJqlPart = bigJql.where({
-      lt: {
-        id: 400
-      }
-    }).and(bigJql.where({
-      lt: {
-        id: 380
-      }
-    })).select("id", "date"));
-    this.jql = jql = JQL.fromJSON(this.json);
-    this.jql2 = jql2 = JQL.fromJSON(this.json2);
-    console.log(jql.select("id", "b").where({
-      a: 10
-    }));
-    console.log(jql.where({
-      a: 10
-    }).select("id", "b"));
-    return "done";
-  };
-
   describe("miscellaneous", function() {
     var loadingTime, records, schema, start, table;
     start = Date.now();
     table = JQL.fromJSON(bigJSON, "bigTable");
     loadingTime = Date.now() - start;
+    console.log(loadingTime + " ms,", table);
     schema = table.schema;
     records = table.records;
     it("loading big data", function() {
@@ -4432,12 +4468,7 @@
       })();
       expect(schema.deleteColumns("testColumn", "testColumn2").names).toEqual(names);
       expect(schema.at("testColumn")).toBe(null);
-      console.log(table.where({
-        id: 692
-      }).select("testColumn", "testColumn2"));
-      return expect(table.where({
-        id: 692
-      }).select("testColumn", "testColumn2").records).toEqual([[]]);
+      return expect(table.records[0].length).toBe(12);
     });
   });
 
@@ -4477,6 +4508,12 @@
       expect(table2.schema.names).toEqual(["id", "username", "password"]);
       return expect(table2.records).toEqual([[1, "2", 3], [4, "5", 6]]);
     });
+    it("fromTable/clone", function() {
+      var clone;
+      clone = table.clone();
+      expect(clone.records.length).toBe(table.records.length);
+      return expect(clone.schema.names).toEqual(table.schema.names);
+    });
     it("constructor", function() {
       var t1, t2;
       t1 = new JQL.Table(["id", "number", "text", "string", "img", "string"]);
@@ -4494,13 +4531,6 @@
       expect(funcSet.strToDat("2015-02-02").getTime()).toBe((new Date(2015, 1, 2)).getTime());
       expect(funcSet.strToNum(funcSet.numToStr(123.456))).toBe(123.456);
       return expect(funcSet.datToNum(funcSet.numToDat(1427040298501))).toBe(1427040298501);
-    });
-    it("where", function() {
-      return expect(table.where({
-        lt: {
-          id: 400
-        }
-      }).records.length).toBe(25);
     });
     it("row", function() {
       return expect(table.row(0).records[0]).toEqual([375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]);
@@ -4520,7 +4550,7 @@
     it("firstRaw", function() {
       return expect(table.firstRaw()).toEqual([375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]);
     });
-    return it("toJSON", function() {
+    it("toJSON", function() {
       return expect(table.row(0).toJSON()).toEqual([
         {
           "id": 375,
@@ -4534,6 +4564,179 @@
           "raw_row_number": null
         }
       ]);
+    });
+    it("where", function() {
+      expect(table.where({
+        lt: {
+          id: 400
+        }
+      }).records.length).toBe(25);
+      expect(table.where({
+        gt: {
+          id: 694
+        }
+      }).records.length).toBe(1);
+      expect(table.where({
+        date: "2012-03-01"
+      }).records.length).toBe(21);
+      return expect(table.where({
+        detail_html: null,
+        detail_pic: null
+      }).records.length).toBe(304);
+    });
+    it("select/project", function() {
+      var selection;
+      selection = table.select("id", "value");
+      expect(selection.records[0].length).toBe(2);
+      expect(selection.schema.names).toEqual(["id", "value"]);
+      selection = table.where({
+        id: 375
+      }).select("id", "value");
+      expect(selection.records.length).toBe(1);
+      expect(selection.records[0]).toEqual([375, 95800]);
+      expect(selection.at(0, "id")).toEqual(375);
+      expect(selection.at("id")).toEqual(375);
+      expect(selection.at(0, "value")).toEqual(95800);
+      expect(selection.at("value")).toEqual(95800);
+      selection = table.where({
+        id: 375
+      }).select("value", "id");
+      expect(selection.records[0]).toEqual([95800, 375]);
+      expect(selection.at(0, "id")).toEqual(375);
+      expect(selection.at("id")).toEqual(375);
+      expect(selection.at(0, "value")).toEqual(95800);
+      expect(selection.at("value")).toEqual(95800);
+      return expect(selection.schema.names).toEqual(["value", "id"]);
+    });
+    it("and", function() {
+      expect(table.where({
+        id: 375
+      }).and(table.where({
+        id: 376
+      })).records.length).toBe(0);
+      return expect(table.where({
+        id: 375
+      }).and(table.where({
+        date: "2012-01-01"
+      })).records).toEqual([[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]);
+    });
+    it("or", function() {
+      return expect(table.where({
+        id: 375
+      }).or(table.where({
+        id: 376
+      })).records).toEqual([[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null], [376, "2012-02-01", 90568, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]);
+    });
+    it("unique/distinct", function() {
+      var tempTable;
+      tempTable = JQL.fromJSON([
+        {
+          a: 10,
+          b: 10
+        }, {
+          a: 10,
+          b: 20
+        }, {
+          a: 20,
+          b: 10
+        }
+      ]);
+      expect(tempTable.select("a").unique().records).toEqual([[10], [20]]);
+      return expect(tempTable.unique().records).toEqual([[10, 10], [10, 20], [20, 10]]);
+    });
+    it("insert", function() {
+      var tempTable;
+      tempTable = JQL.fromJSON([
+        {
+          a: 10,
+          b: 10
+        }
+      ]);
+      expect(tempTable.insert([0, 0], [0, 1]).records).toEqual([[10, 10], [0, 0], [0, 1]]);
+      expect(tempTable.insert([[1, 0], [1, 1]]).records).toEqual([[10, 10], [0, 0], [0, 1], [1, 0], [1, 1]]);
+      return expect(tempTable.insert({
+        a: 2,
+        b: 0
+      }, {
+        a: 2,
+        b: 1
+      }).records).toEqual([[10, 10], [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]);
+    });
+    it("join/innerJoin", function() {
+      var joined, leftTable, rightTable;
+      leftTable = JQL.fromJSON([
+        {
+          lId: 10,
+          b: "asdf"
+        }, {
+          lId: 20,
+          b: "bsdf"
+        }, {
+          lId: 20,
+          b: "csdf"
+        }
+      ]);
+      rightTable = JQL.fromJSON([
+        {
+          rId: 10,
+          c: "10"
+        }, {
+          rId: 20,
+          c: "40"
+        }, {
+          rId: 10,
+          c: "50"
+        }
+      ]);
+      joined = leftTable.join(rightTable, "lId", "rId");
+      return expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "asdf", 10, "50"], [20, "bsdf", 20, "40"], [20, "csdf", 20, "40"]]);
+    });
+    it("leftJoin", function() {});
+    it("rightJoin", function() {});
+    it("groupBy", function() {});
+    it("orderBy", function() {
+      var tempTable;
+      tempTable = JQL.fromJSON([
+        {
+          a: 10,
+          b: 10,
+          c: 10
+        }, {
+          a: 20,
+          b: 20,
+          c: 40
+        }, {
+          a: 20,
+          b: 10,
+          c: 50
+        }
+      ]);
+      return expect(tempTable.orderBy("a", "b", "c").records).toEqual([[10, 10, 10], [20, 10, 50], [20, 20, 40]]);
+    });
+    it("each", function() {
+      var ids, rec;
+      ids = [];
+      table.each(function(record, idx) {
+        return ids.push(record[0]);
+      });
+      return expect(ids).toEqual((function() {
+        var len1, m, results;
+        results = [];
+        for (m = 0, len1 = bigJSON.length; m < len1; m++) {
+          rec = bigJSON[m];
+          results.push(rec.id);
+        }
+        return results;
+      })());
+    });
+    it("equals", function() {
+      return expect(table.equals(JQL.fromJSON(bigJSON))).toBe(true);
+    });
+    return it("count", function() {
+      expect(table.count("*")).toBe(bigJSON.length);
+      expect(table.count()).toBe(table.count("*"));
+      expect(table.count("raw_row_number")).toBe(1);
+      return expect(table.count("id")).toBe(bigJSON.length);
     });
   });
 

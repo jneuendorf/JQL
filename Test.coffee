@@ -1,27 +1,3 @@
-window.test = () ->
-    # @bigJqlPart = bigJql.where({
-    #     lt:
-    #         id: 400
-    # }).or(bigJql.where({
-    #     gt:
-    #         id: 2400
-    # }))
-    console.log @bigJqlPart = bigJql.where({
-        lt:
-            id: 400
-    }).and(bigJql.where({
-        lt:
-            id: 380
-    })).select("id", "date")
-
-    @jql = jql = JQL.fromJSON @json
-    @jql2 = jql2 = JQL.fromJSON @json2
-
-    console.log jql.select("id", "b").where(a: 10)
-    console.log jql.where(a: 10).select("id", "b")
-
-    return "done"
-
 # {
 #     "id": 692,
 #     "date": "2012-04-01",
@@ -40,6 +16,7 @@ describe "miscellaneous", () ->
     start = Date.now()
     table = JQL.fromJSON bigJSON, "bigTable"
     loadingTime = Date.now() - start
+    console.log "#{loadingTime} ms,", table
     schema = table.schema
     records = table.records
 
@@ -146,11 +123,11 @@ describe "JQL.Schema", () ->
         expect schema.at("testColumn")
             .toBe null
 
+        expect table.records[0].length
+            .toBe 12
 
-        console.log table.where(id: 692).select("testColumn", "testColumn2")
-
-        expect table.where(id: 692).select("testColumn", "testColumn2").records
-            .toEqual [[]]
+        # expect table.where(id: 692).select("testColumn", "testColumn2").records
+        #     .toEqual [[]]
 
 
 ##################################################################################################################
@@ -229,6 +206,16 @@ describe "JQL.Table", () ->
             ]
 
     ##############################################################################################################
+    it "fromTable/clone", () ->
+        clone = table.clone()
+
+        expect clone.records.length
+            .toBe table.records.length
+
+        expect clone.schema.names
+            .toEqual table.schema.names
+
+    ##############################################################################################################
     it "constructor", () ->
         t1 = new JQL.Table(["id", "number", "text", "string", "img", "string"])
         t2 = new JQL.Table(
@@ -256,10 +243,6 @@ describe "JQL.Table", () ->
             .toBe 1427040298501
 
     ##############################################################################################################
-    it "where", () ->
-        expect table.where(lt: id: 400).records.length
-            .toBe 25
-
     it "row", () ->
         expect table.row(0).records[0]
             .toEqual [
@@ -274,10 +257,12 @@ describe "JQL.Table", () ->
                 null
             ]
 
+    ##############################################################################################################
     it "col", () ->
         expect table.col "id"
             .toEqual (rec.id for rec in bigJSON)
 
+    ##############################################################################################################
     it "firstRaw", () ->
         expect table.firstRaw()
             .toEqual [
@@ -292,16 +277,243 @@ describe "JQL.Table", () ->
                 null
             ]
 
+    ##############################################################################################################
     it "toJSON", () ->
         expect table.row(0).toJSON()
             .toEqual [{
-                "id": 375,
-                "date": "2012-01-01",
-                "value": 95800,
-                "created_at": "2013-06-06 15:24:35",
-                "updated_at": "2014-01-06 17:36:02",
-                "detail_html": null,
-                "detail_pic": null,
-                "kpi_report_id": 1,
+                "id": 375
+                "date": "2012-01-01"
+                "value": 95800
+                "created_at": "2013-06-06 15:24:35"
+                "updated_at": "2014-01-06 17:36:02"
+                "detail_html": null
+                "detail_pic": null
+                "kpi_report_id": 1
                 "raw_row_number": null
             }]
+
+    ##############################################################################################################
+    it "where", () ->
+        expect table.where(lt: id: 400).records.length
+            .toBe 25
+
+        expect table.where(gt: id: 694).records.length
+            .toBe 1
+
+        expect table.where(date: "2012-03-01").records.length
+            .toBe 21
+
+        expect table.where(detail_html: null, detail_pic: null).records.length
+            .toBe 304
+
+    ##############################################################################################################
+    it "select/project", () ->
+        selection = table.select("id", "value")
+
+        expect selection.records[0].length
+            .toBe 2
+
+        expect selection.schema.names
+            .toEqual ["id", "value"]
+
+        selection = table.where(id: 375).select("id", "value")
+
+        expect selection.records.length
+            .toBe 1
+
+        expect selection.records[0]
+            .toEqual [375, 95800]
+
+        expect selection.at(0, "id")
+            .toEqual 375
+
+        expect selection.at("id")
+            .toEqual 375
+
+        expect selection.at(0, "value")
+            .toEqual 95800
+
+        expect selection.at("value")
+            .toEqual 95800
+
+        selection = table.where(id: 375).select("value", "id")
+
+        expect selection.records[0]
+            .toEqual [95800, 375]
+
+        expect selection.at(0, "id")
+            .toEqual 375
+
+        expect selection.at("id")
+            .toEqual 375
+
+        expect selection.at(0, "value")
+            .toEqual 95800
+
+        expect selection.at("value")
+            .toEqual 95800
+
+        expect selection.schema.names
+            .toEqual ["value", "id"]
+
+    ##############################################################################################################
+    it "and", () ->
+        expect table.where(id: 375).and(table.where(id: 376)).records.length
+            .toBe 0
+
+        expect table.where(id: 375).and(table.where(date: "2012-01-01")).records
+            .toEqual [[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]
+
+    ##############################################################################################################
+    it "or", () ->
+        expect table.where(id: 375).or(table.where(id: 376)).records
+            .toEqual [
+                [375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]
+                [376, "2012-02-01", 90568, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]
+            ]
+
+    ##############################################################################################################
+    it "unique/distinct", () ->
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+            }
+            {
+                a: 10
+                b: 20
+            }
+            {
+                a: 20
+                b: 10
+            }
+        ]
+
+        expect tempTable.select("a").unique().records
+            .toEqual [[10], [20]]
+
+        expect tempTable.unique().records
+            .toEqual [[10, 10], [10, 20], [20, 10]]
+
+    ##############################################################################################################
+    it "insert", () ->
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+            }
+        ]
+
+        expect tempTable.insert([0, 0], [0, 1]).records
+            .toEqual [[10, 10], [0, 0], [0, 1]]
+
+        expect tempTable.insert([[1, 0], [1, 1]]).records
+            .toEqual [[10, 10], [0, 0], [0, 1], [1, 0], [1, 1]]
+
+        expect tempTable.insert({a: 2, b: 0}, {a: 2, b: 1}).records
+            .toEqual [[10, 10], [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]
+
+    ##############################################################################################################
+    it "join/innerJoin", () ->
+        leftTable = JQL.fromJSON [
+            {
+                lId: 10
+                b: "asdf"
+            }
+            {
+                lId: 20
+                b: "bsdf"
+            }
+            {
+                lId: 20
+                b: "csdf"
+            }
+        ]
+
+        rightTable = JQL.fromJSON [
+            {
+                rId: 10
+                c: "10"
+            }
+            {
+                rId: 20
+                c: "40"
+            }
+            {
+                rId: 10
+                c: "50"
+            }
+        ]
+
+        joined = leftTable.join(rightTable, "lId", "rId")
+
+        expect joined.records
+            .toEqual [
+                [10, "asdf", 10, "10"]
+                [10, "asdf", 10, "50"]
+                [20, "bsdf", 20, "40"]
+                [20, "csdf", 20, "40"]
+            ]
+
+    ##############################################################################################################
+    it "leftJoin", () ->
+
+    ##############################################################################################################
+    it "rightJoin", () ->
+
+    ##############################################################################################################
+    it "groupBy", () ->
+
+    ##############################################################################################################
+    it "orderBy", () ->
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+                c: 10
+            }
+            {
+                a: 20
+                b: 20
+                c: 40
+            }
+            {
+                a: 20
+                b: 10
+                c: 50
+            }
+        ]
+
+        expect tempTable.orderBy("a", "b", "c").records
+            .toEqual [[10, 10, 10], [20, 10, 50], [20, 20, 40]]
+
+    ##############################################################################################################
+    it "each", () ->
+        ids = []
+        table.each (record, idx) ->
+            ids.push record[0]
+
+        # just checking if they were iterated in the correct order
+        expect ids
+            .toEqual (rec.id for rec in bigJSON)
+
+    ##############################################################################################################
+    it "equals", () ->
+
+        expect table.equals(JQL.fromJSON bigJSON)
+            .toBe true
+
+    ##############################################################################################################
+    it "count", () ->
+
+        expect table.count("*")
+            .toBe bigJSON.length
+
+        expect table.count()
+            .toBe table.count("*")
+
+        expect table.count("raw_row_number")
+            .toBe 1
+
+        expect table.count("id")
+            .toBe bigJSON.length

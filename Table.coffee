@@ -270,6 +270,13 @@ class JQL.Table
     clone: () ->
         return JQL.Table.new.fromTable(@)
 
+    at: (row, colName) ->
+        if not colName?
+            colName = row
+            row = 0
+
+        return @records[row]?[@schema.nameToIdx(colName)] or undefined
+
     row: (n) ->
         return new JQL.Table(@schema, [@records[n]], @name, @)
 
@@ -294,26 +301,53 @@ class JQL.Table
     # TODO: enable labeling (col AS name)
     # TODO: enable table referencing (SELECT table1.id, table2.id)
     #       => make "Table.column" equal to "column" and make operations (like join) automatically prepend their table name
+    # TODO: make order of select columns the order of the result table
     select: (cols...) ->
         # select all columns
         if not cols? or cols[0] is "*"
             return @clone()
 
         # select not all columns => projection
-        schema = @schema.clone()
-
-        indicesToKeep = (schema.nameToIdx(col) for col in cols when col in schema.names)
+        schema = @schema
 
         records = []
         for record in @records
-            records.push(col for col, i in record when i in indicesToKeep)
+            records.push (record[schema.nameToIdx(col)] for col in cols)
 
-        schema.cols = (col for col, i in schema.cols when col.index in indicesToKeep)
+        # [o,o,x,o,x,o,o,x] -> indicesToKeep = [0,1,3,5,6] (from [0..7])
+
+        schema = new JQL.Schema()
+        for col, i in cols
+            c = @schema.cols[@schema.nameToIdx(col)]
+            c.index = i
+            schema.cols.push c
+
+        # schema.cols = (col for col in schema.cols when col.index in indicesToKeep)
         schema._updateData()
         return new JQL.Table(schema, records, "#{@name}.select", @)
 
     project: () ->
         return @select.apply(@, arguments)
+
+    count: (cols...) ->
+        if cols[0] instanceof Array
+            cols = cols[0]
+
+        if cols[0] is "*" or not cols[0]?
+            return @records.length
+
+        # else:
+        num = 0
+        indices = (@schema.nameToIdx(col) for col in cols)
+        console.log indices
+        for record in @records
+            valid = true
+            for idx in indices when not record[idx]?
+                valid = false
+                break
+            if valid
+                num++
+        return num
 
     where: (predicate) ->
         if predicate instanceof Function
@@ -505,7 +539,7 @@ class JQL.Table
 
     equals: (table) ->
         if @schema.equals table.schema
-            if @records.length isnt table.record.length
+            if @records.length isnt table.records.length
                 return false
 
             doneIndices = []
@@ -520,16 +554,35 @@ class JQL.Table
     set: () ->
 
     unique: () ->
-        records = []
+        uniqueRecords = []
         for record in @records
-            for r in records when not arrEquals(record, r)
-                records.push record
-        return new JQL.Table(@schema.clone(), records)
+            isDuplicate = false
+            for uniqueRecord in uniqueRecords when arrEquals(record, uniqueRecord)
+                isDuplicate = true
+                break
+            if not isDuplicate
+                uniqueRecords.push record
+        return new JQL.Table(@schema.clone(), uniqueRecords)
 
     distinct: () ->
-        return @unique.applu(@, arguments)
+        return @unique.apply(@, arguments)
 
-    groupBy: (aggregation) ->
+    groupBy: (col, aggregation) ->
+        # if not aggregation?
+        #     return @orderBy.apply(@, cols)
+
+        dict = {}
+        aggrCol = aggregation.col
+
+        acc = null
+        for record in @records
+            val = record[@schema.nameToIdx(col)]
+            if not dict[val]?
+                dict[val] = record[@schema.nameToIdx(aggrCol)]
+            else
+                dict[val] += record[@schema.nameToIdx(aggrCol)]
+
+        return new JQL.Table()
 
     # in place
     orderBy: (cols...) ->
@@ -537,6 +590,25 @@ class JQL.Table
             cols = cols[0]
 
         schema = @schema
+
+        # TODO: use faster sorting algorithm
+        # NOTE: from http://jsperf.com/sorting-algorithms/9
+        # // In place quicksort
+        # function inplace_quicksort_partition(ary, start, end, pivotIndex) {
+        #   var i = start, j = end;
+        #   var pivot = ary[pivotIndex];
+        #
+        #   while(true) {
+        #       while(ary[i] < pivot) {i++};
+        #       j--;
+        #       while(pivot < ary[j]) {j--};
+        #       if(!(i<j)) {
+        #           return i;
+        #       }
+        #       swap(ary,i,j);
+        #       i++;
+        #  }
+        # }
 
         @records.sort (r1, r2) ->
             for col in cols
@@ -550,7 +622,8 @@ class JQL.Table
         return @
 
     insert: (records...) ->
-        if records[0] instanceof Array
+        # array of records is passed:
+        if records instanceof Array and records[0] instanceof Array and records[0][0] instanceof Array
             records = records[0]
 
         for record in records

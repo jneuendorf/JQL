@@ -60,10 +60,10 @@ window.bigJSON = [
         "value": 84144,
         "created_at": "2013-06-06 15:24:35",
         "updated_at": "2014-01-06 17:36:02",
-        "detail_html": null,
-        "detail_pic": null,
+        "detail_html": "<div />",
+        "detail_pic": "base64",
         "kpi_report_id": 1,
-        "raw_row_number": null
+        "raw_row_number": 123
     },
     {
         "id": 381,

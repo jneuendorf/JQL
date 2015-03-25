@@ -1,6 +1,14 @@
 body { overflow-y: scroll; }
 
-.jasmine_html-reporter { background-color: #eee; padding: 5px; margin: -8px; font-size: 11px; font-family: Monaco, "Lucida Console", monospace; line-height: 14px; color: #333; }
+.jasmine_html-reporter {
+    background-color: #333;
+    padding: 5px;
+    margin: -8px;
+    font-size: 11px;
+    font-family: Monaco, "Lucida Console", monospace;
+    line-height: 14px;
+    color: #eee;
+}
 .jasmine_html-reporter a { text-decoration: none; }
 .jasmine_html-reporter a:hover { text-decoration: underline; }
 .jasmine_html-reporter p, .jasmine_html-reporter h1, .jasmine_html-reporter h2, .jasmine_html-reporter h3, .jasmine_html-reporter h4, .jasmine_html-reporter h5, .jasmine_html-reporter h6 { margin: 0; line-height: 14px; }
@@ -16,7 +24,7 @@ body { overflow-y: scroll; }
 .jasmine_html-reporter .symbol-summary { overflow: hidden; *zoom: 1; margin: 14px 0; }
 .jasmine_html-reporter .symbol-summary li { display: inline-block; height: 12px; width: 14px; font-size: 16px; }
 .jasmine_html-reporter .symbol-summary li.passed { font-size: 14px; }
-.jasmine_html-reporter .symbol-summary li.passed:before { color: #007069; content: "\02022"; }
+.jasmine_html-reporter .symbol-summary li.passed:before { color: #10B341; content: "\02022"; }
 .jasmine_html-reporter .symbol-summary li.failed { line-height: 9px; }
 .jasmine_html-reporter .symbol-summary li.failed:before { color: #ca3a11; content: "\d7"; font-weight: bold; margin-left: -1px; }
 .jasmine_html-reporter .symbol-summary li.disabled { font-size: 14px; }
@@ -28,7 +36,7 @@ body { overflow-y: scroll; }
 .jasmine_html-reporter .exceptions { color: #fff; float: right; margin-top: 5px; margin-right: 5px; }
 .jasmine_html-reporter .bar { line-height: 28px; font-size: 14px; display: block; color: #eee; }
 .jasmine_html-reporter .bar.failed { background-color: #ca3a11; }
-.jasmine_html-reporter .bar.passed { background-color: #007069; }
+.jasmine_html-reporter .bar.passed { background-color: #10B341; }
 .jasmine_html-reporter .bar.skipped { background-color: #bababa; }
 .jasmine_html-reporter .bar.errored { background-color: #ca3a11; }
 .jasmine_html-reporter .bar.menu { background-color: #fff; color: #aaa; }
@@ -47,13 +55,15 @@ body { overflow-y: scroll; }
 .jasmine_html-reporter .summary { margin-top: 14px; }
 .jasmine_html-reporter .summary ul { list-style-type: none; margin-left: 14px; padding-top: 0; padding-left: 0; }
 .jasmine_html-reporter .summary ul.suite { margin-top: 7px; margin-bottom: 7px; }
-.jasmine_html-reporter .summary li.passed a { color: #007069; }
+.jasmine_html-reporter .summary li.passed a { color: #10B341; }
 .jasmine_html-reporter .summary li.failed a { color: #ca3a11; }
 .jasmine_html-reporter .summary li.empty a { color: #ba9d37; }
 .jasmine_html-reporter .summary li.pending a { color: #ba9d37; }
 .jasmine_html-reporter .description + .suite { margin-top: 0; }
 .jasmine_html-reporter .suite { margin-top: 14px; }
-.jasmine_html-reporter .suite a { color: #333; }
+.jasmine_html-reporter .suite a {
+    color: #eee;
+}
 .jasmine_html-reporter .failures .spec-detail { margin-bottom: 28px; }
 .jasmine_html-reporter .failures .spec-detail .description { background-color: #ca3a11; }
 .jasmine_html-reporter .failures .spec-detail .description a { color: white; }

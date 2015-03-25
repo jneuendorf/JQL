@@ -8,6 +8,11 @@ JQL =
         async:
             delay: 20 # in ms
             recordsPerCall: 10000
+    # built-in SQL functions
+    sum: (col) ->
+        return () ->
+            true
+    # TODO: avg, max, min, sum
 
 getSelf = () ->
     return @
