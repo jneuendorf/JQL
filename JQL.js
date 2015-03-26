@@ -3758,7 +3758,7 @@
     };
 
     Table.prototype.select = function() {
-      var c, col, cols, i, len1, len2, m, o, record, records, ref, schema;
+      var alias, c, col, cols, i, len1, len2, m, o, parts, record, records, ref, schema;
       cols = 1 <= arguments.length ? slice.call(arguments, 0) : [];
       if ((cols == null) || cols[0] === "*") {
         return this.clone();
@@ -3781,8 +3781,16 @@
       schema = new JQL.Schema();
       for (i = o = 0, len2 = cols.length; o < len2; i = ++o) {
         col = cols[i];
+        if (col.toLowerCase().indexOf(" as ")) {
+          parts = col.split(/\s+as\s+/i);
+          col = parts[0];
+          alias = parts[1];
+        }
         c = this.schema.cols[this.schema.nameToIdx(col)];
         c.index = i;
+        if (alias != null) {
+          c.name = alias;
+        }
         schema.cols.push(c);
       }
       schema._updateData();
@@ -4606,7 +4614,10 @@
       expect(selection.at("id")).toEqual(375);
       expect(selection.at(0, "value")).toEqual(95800);
       expect(selection.at("value")).toEqual(95800);
-      return expect(selection.schema.names).toEqual(["value", "id"]);
+      expect(selection.schema.names).toEqual(["value", "id"]);
+      debugger;
+      selection = table.select("id AS num", "value as someLabel");
+      return expect(selection.schema.names).toEqual(["num", "someLabel"]);
     });
     it("and", function() {
       expect(table.where({

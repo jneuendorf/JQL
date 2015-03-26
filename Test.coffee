@@ -356,6 +356,12 @@ describe "JQL.Table", () ->
         expect selection.schema.names
             .toEqual ["value", "id"]
 
+        debugger
+        selection = table.select("id AS num", "value as someLabel")
+
+        expect selection.schema.names
+            .toEqual ["num", "someLabel"]
+
     ##############################################################################################################
     it "and", () ->
         expect table.where(id: 375).and(table.where(id: 376)).records.length

@@ -298,10 +298,8 @@ class JQL.Table
 
         return (record[n] for record in @records)
 
-    # TODO: enable labeling (col AS name)
     # TODO: enable table referencing (SELECT table1.id, table2.id)
     #       => make "Table.column" equal to "column" and make operations (like join) automatically prepend their table name
-    # TODO: make order of select columns the order of the result table
     select: (cols...) ->
         # select all columns
         if not cols? or cols[0] is "*"
@@ -318,8 +316,17 @@ class JQL.Table
 
         schema = new JQL.Schema()
         for col, i in cols
+            # col contains alias
+            if col.toLowerCase().indexOf " as "
+                parts = col.split /\s+as\s+/i
+                col = parts[0]
+                alias = parts[1]
+
             c = @schema.cols[@schema.nameToIdx(col)]
             c.index = i
+
+            if alias?
+                c.name = alias
             schema.cols.push c
 
         # schema.cols = (col for col in schema.cols when col.index in indicesToKeep)
