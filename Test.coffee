@@ -356,7 +356,6 @@ describe "JQL.Table", () ->
         expect selection.schema.names
             .toEqual ["value", "id"]
 
-        debugger
         selection = table.select("id AS num", "value as someLabel")
 
         expect selection.schema.names
@@ -364,15 +363,20 @@ describe "JQL.Table", () ->
 
     ##############################################################################################################
     it "and", () ->
-        expect table.where(id: 375).and(table.where(id: 376)).records.length
+        expect table.where(id: 375).and(id: 376).records.length
             .toBe 0
 
-        expect table.where(id: 375).and(table.where(date: "2012-01-01")).records
+        expect table.where(id: 375).and(date: "2012-01-01").records
+            .toEqual [[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]
+
+        expect table.where(id: 375).and().where(date: "2012-01-01").records
             .toEqual [[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]
 
     ##############################################################################################################
     it "or", () ->
-        expect table.where(id: 375).or(table.where(id: 376)).records
+        console.log "or:"
+        console.log table.where(id: 375).or(id: 376)
+        expect table.where(id: 375).or(id: 376).records
             .toEqual [
                 [375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]
                 [376, "2012-02-01", 90568, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]
@@ -463,12 +467,53 @@ describe "JQL.Table", () ->
 
     ##############################################################################################################
     it "leftJoin", () ->
+        leftTable = JQL.fromJSON [
+            {
+                lId: 10
+                b: "asdf"
+            }
+            {
+                lId: 20
+                b: "bsdf"
+            }
+            {
+                lId: 30
+                b: "csdf"
+            }
+        ]
+
+        rightTable = JQL.fromJSON [
+            {
+                rId: 10
+                c: "10"
+            }
+            {
+                rId: 20
+                c: "40"
+            }
+            {
+                rId: 10
+                c: "50"
+            }
+        ]
+
+        joined = leftTable.leftJoin(rightTable, "lId", "rId")
+
+        expect joined.records
+            .toEqual [
+                [10, "asdf", 10, "10"]
+                [10, "asdf", 10, "50"]
+                [20, "bsdf", 20, "40"]
+                [30, "csdf", null, null]
+            ]
 
     ##############################################################################################################
     it "rightJoin", () ->
 
     ##############################################################################################################
     it "groupBy", () ->
+        expect table.groupBy("kpi_report_id", JQL.sum("id")).where(kpi_report_id: 1).firstRaw()
+            .toEqual [375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null, 5730]
 
     ##############################################################################################################
     it "orderBy", () ->
@@ -505,13 +550,11 @@ describe "JQL.Table", () ->
 
     ##############################################################################################################
     it "equals", () ->
-
         expect table.equals(JQL.fromJSON bigJSON)
             .toBe true
 
     ##############################################################################################################
     it "count", () ->
-
         expect table.count("*")
             .toBe bigJSON.length
 

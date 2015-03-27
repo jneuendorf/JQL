@@ -245,12 +245,7 @@ class JQL.Table
             else if arguments.length is 1
                 pseudoRecord = schema
             else
-                console.warn "Invalid arguments passed:", arguments
-                # 1 object for each column, each being a name-type pair
-                # cols = toArr arguments
-                # for col in cols
-                #     for key, val of col when not pseudoRecord[key]?
-                #         pseudoRecord[key] = val
+                console.warn "JQL.Table::constructor: invalid arguments passed:", arguments
 
             @schema = new JQL.Schema(@, pseudoRecord, true)
             @records = []
@@ -329,32 +324,34 @@ class JQL.Table
                 c.name = alias
             schema.cols.push c
 
-        # schema.cols = (col for col in schema.cols when col.index in indicesToKeep)
         schema._updateData()
         return new JQL.Table(schema, records, "#{@name}.select", @)
 
     project: () ->
         return @select.apply(@, arguments)
 
-    count: (cols...) ->
-        if cols[0] instanceof Array
-            cols = cols[0]
-
-        if cols[0] is "*" or not cols[0]?
+    count: (col) ->
+        if col is "*" or not col?
             return @records.length
 
         # else:
         num = 0
-        indices = (@schema.nameToIdx(col) for col in cols)
-        console.log indices
-        for record in @records
-            valid = true
-            for idx in indices when not record[idx]?
-                valid = false
-                break
-            if valid
-                num++
+        idx = @schema.nameToIdx(col)
+
+        for record in @records when record[idx]?
+            num++
         return num
+
+    merge: (table) ->
+        if @schema.equals table.schema
+            return new JQL.Table(
+                @schema.clone()
+                arrUnique(@records.concat table.records)
+                @name
+            )
+
+        console.warn "JQL::merge: schema of given table does not match schema of this table! Returning this table."
+        return @
 
     where: (predicate) ->
         if predicate instanceof Function
@@ -420,10 +417,11 @@ class JQL.Table
             @
         )
 
-    alter: () ->
+    alter = () ->
+        return @
 
     # form: {name:, type:, notNull:, autoIncrement:, prime/primaryKey:, initVal: }
-    @::alter.addColumn = (col) ->
+    alter.addColumn = (col) ->
         if col.notNull is true and not col.initVal
             console.warn "Can't add NOT NULL column if no initial value is given!"
             return @
@@ -435,7 +433,7 @@ class JQL.Table
 
         return @
 
-    @::alter.deleteColumn = (colName) ->
+    alter.deleteColumn = (colName) ->
         idx = @schema.nameToIdx colName
         @schema.deleteColumn colName
 
@@ -444,48 +442,42 @@ class JQL.Table
 
         return @
 
-    @::alter.dropColumn = () ->
+    alter.dropColumn = () ->
         return @alter.deleteColumn.apply(@, arguments)
 
-    @::alter.changeColumn = (name, type) ->
+    alter.changeColumn = (name, type) ->
         @schema.changeColumn name, type
         return @
 
-    @::alter.changeColumnType = () ->
+    alter.changeColumnType = () ->
         return @alter.changeColumn.apply(@, arguments)
 
-    @::alter.renameColumn = (oldName, newName) ->
+    alter.renameColumn = (oldName, newName) ->
         @schema.renameColumn oldName, newName
         return @
 
-    @::alter.changeColumnName = () ->
+    alter.changeColumnName = () ->
         return @alter.renameColumn.apply(@, arguments)
 
+    alter: alter
+
     # make all altering methods directly accessible from JQL.Table object
-    for name, method of @::alter
+    for name, method of alter
         @::[name] = method
 
     rename: (name) ->
         @name = "#{name}"
         return @
 
-    and: (table) ->
-        # TODO: this operation is not commutative.
-        # if 'this' contains 2 identical rows R and 'table' also has that row the result depends on the order:
-        # this.and(table) != table.and(this)
-        #    both rows R   -    1 row R
-        # TODO: maybe assume uniqueness right away?!?
+    and: (predicate) ->
+        if not predicate?
+            return @
+        return @where(predicate)
 
-        return new JQL.Table(
-            @schema.clone()
-            record for record in @records when record in table.records
-        )
-
-    or: (table) ->
-        return new JQL.Table(
-            @schema.clone()
-            @records.concat table.records
-        )
+    or: (predicate) ->
+        if not predicate?
+            return @partOf
+        return @merge @partOf.where(predicate)
 
     innerJoin: (table, leftCol, rightCol) ->
         if not rightCol
@@ -499,9 +491,10 @@ class JQL.Table
                 if leftRecord[leftSchema.nameToIdx(leftCol)] is rightRecord[rightSchema.nameToIdx(rightCol)]
                     records.push leftRecord.concat(rightRecord)
 
-        return new JQL.Table(leftSchema.concat(rightSchema), records)
-
-    outerJoin: (table, leftCol, rightCol) ->
+        return new JQL.Table(
+            leftSchema.concat(rightSchema)
+            records
+        )
 
     leftJoin: (table, leftCol, rightCol) ->
         if not rightCol
@@ -557,39 +550,67 @@ class JQL.Table
             return doneIndices.length is @records.length
         return false
 
-
     set: () ->
 
     unique: () ->
-        uniqueRecords = []
-        for record in @records
-            isDuplicate = false
-            for uniqueRecord in uniqueRecords when arrEquals(record, uniqueRecord)
-                isDuplicate = true
-                break
-            if not isDuplicate
-                uniqueRecords.push record
-        return new JQL.Table(@schema.clone(), uniqueRecords)
+        return new JQL.Table(
+            @schema.clone()
+            arrUnique(@records)
+        )
 
     distinct: () ->
         return @unique.apply(@, arguments)
 
-    groupBy: (col, aggregation) ->
-        # if not aggregation?
-        #     return @orderBy.apply(@, cols)
-
+    groupBy: (col, aggregation, alias) ->
         dict = {}
-        aggrCol = aggregation.col
 
-        acc = null
+        # aggregation given
+        if aggregation instanceof Function and typeof aggregation.column is "string"
+            recordDict = {}
+            schema = @schema.clone()
+
+            for record in @records
+                val = record[schema.nameToIdx(col)]
+                if not dict[val]?
+                    dict[val] = [record[schema.nameToIdx(aggregation.column)]]
+                    # save copy of record so we don't modify the original data
+                    recordDict[val] = record.slice(0)
+                else
+                    dict[val].push record[schema.nameToIdx(aggregation.column)]
+
+            for groupByCol, aggrVals of dict
+                dict[groupByCol] = aggregation.call(@, aggrVals)
+
+
+            # add aggregation column to records
+            for key, val of dict
+                recordDict[key].push val
+
+            console.log dict
+            console.log recordDict
+
+            schema.cols.push {
+                name: aggregation.name or alias or "aggregation"
+                type: aggregation.type()
+                index: schema.cols.length
+            }
+            schema._updateData()
+
+            return new JQL.Table(
+                schema
+                (record for key, record of recordDict)
+            )
+
+        # else: no aggregation => don't calculate anything, don't add extra column
         for record in @records
             val = record[@schema.nameToIdx(col)]
             if not dict[val]?
-                dict[val] = record[@schema.nameToIdx(aggrCol)]
-            else
-                dict[val] += record[@schema.nameToIdx(aggrCol)]
+                dict[val] = record
 
-        return new JQL.Table()
+        return new JQL.Table(
+            @schema.clone()
+            (record for key, record of dict)
+        )
 
     # in place
     orderBy: (cols...) ->
@@ -598,7 +619,7 @@ class JQL.Table
 
         schema = @schema
 
-        # TODO: use faster sorting algorithm
+        # TODO: maybe use faster sorting algorithm
         # NOTE: from http://jsperf.com/sorting-algorithms/9
         # // In place quicksort
         # function inplace_quicksort_partition(ary, start, end, pivotIndex) {

@@ -9,10 +9,40 @@ JQL =
             delay: 20 # in ms
             recordsPerCall: 10000
     # built-in SQL functions
+    # they are called with a table as 'this' context
     sum: (col) ->
-        return () ->
-            true
+        f = (vals) ->
+            res = 0
+            res += val for val in vals
+            return res
+        f.column = col
+        f.name = "sum"
+        f.type = () ->
+            return "number"
+        return f
+    first: (col) ->
+        f = (vals) ->
+            return vals[0]
+        f.column = col
+        f.name = "first"
+        self = @
+        f.type = () ->
+            return self.schema.cols[self.schema.nameToIdx(col)].type
+        return f
+    last: (col) ->
+        f = (vals) ->
+            return vals[vals.length - 1]
+        f.column = col
+        f.name = "last"
+        f.type = () ->
+            return self.schema.cols[self.schema.nameToIdx(col)].type
+        return f
     # TODO: avg, max, min, sum
+    createAggregation: (func, onColumn, aggrName, aggrType) ->
+        func.column = onColumn
+        func.name = aggrName
+        func.type = aggrType
+        return func
 
 getSelf = () ->
     return @
@@ -34,6 +64,18 @@ arrEquals = (arr1, arr2) ->
             return false
 
     return true
+
+arrUnique = (arr) ->
+    res = []
+    for elem in arr
+        valid = true
+        for done in res when arrEquals(done, elem)
+            valid = false
+            break
+
+        if valid
+            res.push elem
+    return res
 
 cloneObject = (obj) ->
     return JSON.parse JSON.stringify(obj)
