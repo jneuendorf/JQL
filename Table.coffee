@@ -214,7 +214,6 @@ class JQL.Table
                     else
                         console.warn "Table '#{name}' does not exist! Create (first) with CREATE TABLE!"
 
-            console.log tables
             return tables
         # else:
         console.warn "SQL statement somehow invalid (back ticks erased already):", sql
@@ -226,7 +225,7 @@ class JQL.Table
             record.slice(0) for record in table.records
         )
 
-    constructor: (schema, records, name="Table", partOf=null) ->
+    constructor: (schema, records, name=JQL.config.defaultTableName, partOf=null) ->
         if schema instanceof JQL.Schema
             @schema = schema
             schema.table = @
@@ -252,7 +251,7 @@ class JQL.Table
             @name = "Table"
             @partOf = null
 
-        @history = []
+        # @history = []
 
         # create props that are just for being close to SQL
         # i.e. this.update.set ...
@@ -517,9 +516,27 @@ class JQL.Table
         return new JQL.Table(leftSchema.concat(rightSchema), records)
 
     rightJoin: (table, leftCol, rightCol) ->
-        return table.leftJoin(@, rightCol, leftCol)
+        if not rightCol
+            rightCol = leftCol
+
+        records = []
+        leftSchema = @schema
+        rightSchema = table.schema
+        nullArray = (null for i in [0...rightSchema.cols.length])
+        for rightRecord in table.records
+            matchFound = false
+            for leftRecord in @records
+                if rightRecord[rightSchema.nameToIdx(rightCol)] is leftRecord[leftSchema.nameToIdx(leftCol)]
+                    records.push leftRecord.concat(rightRecord)
+                    matchFound = true
+
+            if not matchFound
+                records.push nullArray.concat(rightRecord)
+
+        return new JQL.Table(leftSchema.concat(rightSchema), records)
 
     fullOuterJoin: (table, leftCol, rightCol) ->
+        # TODO!!
 
     join: (table, leftCol, rightCol, type="inner") ->
         if arguments.length is 3
@@ -586,9 +603,6 @@ class JQL.Table
             for key, val of dict
                 recordDict[key].push val
 
-            console.log dict
-            console.log recordDict
-
             schema.cols.push {
                 name: aggregation.name or alias or "aggregation"
                 type: aggregation.type()
@@ -618,25 +632,6 @@ class JQL.Table
             cols = cols[0]
 
         schema = @schema
-
-        # TODO: maybe use faster sorting algorithm
-        # NOTE: from http://jsperf.com/sorting-algorithms/9
-        # // In place quicksort
-        # function inplace_quicksort_partition(ary, start, end, pivotIndex) {
-        #   var i = start, j = end;
-        #   var pivot = ary[pivotIndex];
-        #
-        #   while(true) {
-        #       while(ary[i] < pivot) {i++};
-        #       j--;
-        #       while(pivot < ary[j]) {j--};
-        #       if(!(i<j)) {
-        #           return i;
-        #       }
-        #       swap(ary,i,j);
-        #       i++;
-        #  }
-        # }
 
         @records.sort (r1, r2) ->
             for col in cols

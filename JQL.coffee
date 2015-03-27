@@ -8,6 +8,7 @@ JQL =
         async:
             delay: 20 # in ms
             recordsPerCall: 10000
+        defaultTableName: "Table"
     # built-in SQL functions
     # they are called with a table as 'this' context
     sum: (col) ->

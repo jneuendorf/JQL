@@ -105,11 +105,11 @@ describe "JQL.Schema", () ->
                     .toBe 13
             catch error
                 console.warn error.message
-            console.log "async done....."
+            # console.log "async done....."
             return true
 
         schema.addColumn({name: "testColumn4", type: "number"}, true, callback)
-        console.log "async starting...."
+        # console.log "async starting...."
         expect records[records.length - 1].length
             .toBe 12
 
@@ -374,8 +374,6 @@ describe "JQL.Table", () ->
 
     ##############################################################################################################
     it "or", () ->
-        console.log "or:"
-        console.log table.where(id: 375).or(id: 376)
         expect table.where(id: 375).or(id: 376).records
             .toEqual [
                 [375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]
@@ -457,6 +455,9 @@ describe "JQL.Table", () ->
 
         joined = leftTable.join(rightTable, "lId", "rId")
 
+        expect joined.schema.names
+            .toEqual ["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]
+
         expect joined.records
             .toEqual [
                 [10, "asdf", 10, "10"]
@@ -464,6 +465,13 @@ describe "JQL.Table", () ->
                 [20, "bsdf", 20, "40"]
                 [20, "csdf", 20, "40"]
             ]
+
+        leftTable.name = "A"
+        rightTable.name = "B"
+        joined = leftTable.join(rightTable, "lId", "rId")
+
+        expect joined.schema.names
+            .toEqual ["A.lId", "A.b", "B.rId", "B.c"]
 
     ##############################################################################################################
     it "leftJoin", () ->
@@ -499,6 +507,9 @@ describe "JQL.Table", () ->
 
         joined = leftTable.leftJoin(rightTable, "lId", "rId")
 
+        expect joined.schema.names
+            .toEqual ["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]
+
         expect joined.records
             .toEqual [
                 [10, "asdf", 10, "10"]
@@ -509,6 +520,93 @@ describe "JQL.Table", () ->
 
     ##############################################################################################################
     it "rightJoin", () ->
+        leftTable = JQL.fromJSON [
+            {
+                lId: 10
+                b: "asdf"
+            }
+            {
+                lId: 20
+                b: "bsdf"
+            }
+            {
+                lId: 10
+                b: "csdf"
+            }
+        ]
+
+        rightTable = JQL.fromJSON [
+            {
+                rId: 10
+                c: "10"
+            }
+            {
+                rId: 20
+                c: "40"
+            }
+            {
+                rId: 30
+                c: "50"
+            }
+        ]
+
+        joined = leftTable.rightJoin(rightTable, "lId", "rId")
+
+        expect joined.schema.names
+            .toEqual ["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]
+
+        expect joined.records
+            .toEqual [
+                [10, "asdf", 10, "10"]
+                [10, "csdf", 10, "10"]
+                [20, "bsdf", 20, "40"]
+                [null, null, 30, "50"]
+            ]
+
+    ##############################################################################################################
+    it "fullOuterJoin", () ->
+        leftTable = JQL.fromJSON [
+            {
+                lId: 10
+                b: "asdf"
+            }
+            {
+                lId: 20
+                b: "bsdf"
+            }
+            {
+                lId: 40
+                b: "csdf"
+            }
+        ]
+
+        rightTable = JQL.fromJSON [
+            {
+                rId: 10
+                c: "10"
+            }
+            {
+                rId: 20
+                c: "40"
+            }
+            {
+                rId: 30
+                c: "50"
+            }
+        ]
+
+        joined = leftTable.fullOuterJoin(rightTable, "lId", "rId")
+
+        expect joined.schema.names
+            .toEqual ["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]
+
+        expect joined.records
+            .toEqual [
+                [10, "asdf", 10, "10"]
+                [10, "csdf", 10, "10"]
+                [20, "bsdf", 20, "40"]
+                [null, null, 30, "50"]
+            ]
 
     ##############################################################################################################
     it "groupBy", () ->
@@ -541,12 +639,17 @@ describe "JQL.Table", () ->
     ##############################################################################################################
     it "each", () ->
         ids = []
+        indices = []
         table.each (record, idx) ->
             ids.push record[0]
+            indices.push idx
 
         # just checking if they were iterated in the correct order
         expect ids
             .toEqual (rec.id for rec in bigJSON)
+
+        expect indices
+            .toEqual [0...305]
 
     ##############################################################################################################
     it "equals", () ->

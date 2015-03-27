@@ -3066,7 +3066,8 @@
       async: {
         delay: 20,
         recordsPerCall: 10000
-      }
+      },
+      defaultTableName: "Table"
     },
     sum: function(col) {
       var f;
@@ -3303,57 +3304,35 @@
       return JQL.Schema.fromSchema(this);
     };
 
-    Schema.prototype.and = function(schema) {
-      var col, i, indicesToRemove, len1, m, name, ref;
-      indicesToRemove = [];
-      ref = this.names;
-      for (i = m = 0, len1 = ref.length; m < len1; i = ++m) {
-        name = ref[i];
-        if (schema.nameToIdx(name) < 0) {
-          indicesToRemove.push(i);
-        }
-      }
-      this.cols = (function() {
-        var len2, o, ref1, results;
-        ref1 = this.cols;
-        results = [];
-        for (i = o = 0, len2 = ref1.length; o < len2; i = ++o) {
-          col = ref1[i];
-          if (indexOf.call(indicesToRemove, i) < 0) {
-            results.push(col);
-          }
-        }
-        return results;
-      }).call(this);
-      this._updateData();
-      return this;
-    };
-
-    Schema.prototype.or = function(schema) {};
-
     Schema.prototype.concat = function(schema) {
-      var col, i, len1, len2, m, o, ref, ref1;
-      ref = this.cols;
+      var col, i, leftSchema, len1, len2, m, o, ref, ref1, rightSchema;
+      leftSchema = this.clone();
+      ref = leftSchema.cols;
       for (i = m = 0, len1 = ref.length; m < len1; i = ++m) {
         col = ref[i];
-        if (!(indexOf.call(col.name, ".") < 0)) {
-          continue;
+        if (indexOf.call(col.name, ".") < 0) {
+          if (leftSchema.table.name !== JQL.config.defaultTableName) {
+            leftSchema.cols[i].name = leftSchema.table.name + "." + col.name;
+          } else {
+            leftSchema.cols[i].name = leftSchema.table.name + "Left." + col.name;
+          }
         }
-        console.log(col);
-        this.cols[i].name = this.table.name + "." + col.name;
       }
-      ref1 = schema.cols;
+      rightSchema = schema.clone();
+      ref1 = rightSchema.cols;
       for (i = o = 0, len2 = ref1.length; o < len2; i = ++o) {
         col = ref1[i];
-        if (!(indexOf.call(col.name, ".") < 0)) {
-          continue;
+        if (indexOf.call(col.name, ".") < 0) {
+          if (this.table.name !== JQL.config.defaultTableName) {
+            rightSchema.cols[i].name = rightSchema.table.name + "." + col.name;
+          } else {
+            rightSchema.cols[i].name = rightSchema.table.name + "Right." + col.name;
+          }
         }
-        console.log(col);
-        schema.cols[i].name = schema.table.name + "." + col.name;
       }
-      this.cols = this.cols.concat(schema.cols);
-      this._updateData();
-      return this;
+      leftSchema.cols = leftSchema.cols.concat(rightSchema.cols);
+      leftSchema._updateData();
+      return leftSchema;
     };
 
     Schema.prototype.join = function() {
@@ -3364,6 +3343,7 @@
     /**
     * @method addColumn
     * @param column {Object}
+    * An optional .initValue attribut can be passed along. This can either be a function(record, index), an array of initial values, or a single initial value (for all records).
     * @param async {Boolean}
     * Optional. Default is 'false'. If set to 'true' appending the initial value to the table records is done asynchronously. Recommended for very tables with many records.
     * @param callback {Function}
@@ -3372,7 +3352,7 @@
      */
 
     Schema.prototype.addColumn = function(col, async, callback) {
-      var colData, delay, deltaIdx, f, i, initValue, len1, m, maxIdx, record, records, ref;
+      var colData, delay, deltaIdx, f, i, initValue, initValues, len1, m, maxIdx, record, records, ref;
       if (async == null) {
         async = false;
       }
@@ -3387,47 +3367,74 @@
       this.cols.push(colData);
       this._updateData();
       initValue = col.initValue;
-      if (col.initValue === void 0) {
-        initValue = null;
-      }
-      if ((initValue != null) && typeof initValue !== colData.type) {
-        console.warn("Initial value '" + initValue + "' (" + (typeof initValue) + ") does not match column type '" + colData.type + "'! Falling back to 'null'.");
-        initValue = null;
+      if (initValue instanceof Function) {
+        if (!async) {
+          initValues = (function() {
+            var len1, m, ref, results;
+            ref = this.table.records;
+            results = [];
+            for (i = m = 0, len1 = ref.length; m < len1; i = ++m) {
+              record = ref[i];
+              results.push(initValue(record, i));
+            }
+            return results;
+          }).call(this);
+        } else {
+          initValues = initValue;
+        }
+      } else if (initValue instanceof Array) {
+        initValues = initValue;
+      } else {
+        if (col.initValue === void 0) {
+          initValue = null;
+        }
+        if ((initValue != null) && typeof initValue !== colData.type) {
+          console.warn("Initial value '" + initValue + "' (" + (typeof initValue) + ") does not match column type '" + colData.type + "'! Falling back to 'null'.");
+          initValue = null;
+        }
+        initValues = (function() {
+          var m, ref, results;
+          results = [];
+          for (i = m = 0, ref = this.table.records.length; 0 <= ref ? m < ref : m > ref; i = 0 <= ref ? ++m : --m) {
+            results.push(initValue);
+          }
+          return results;
+        }).call(this);
       }
       if (!async) {
         ref = this.table.records;
-        for (m = 0, len1 = ref.length; m < len1; m++) {
-          record = ref[m];
-          record.push(initValue);
+        for (i = m = 0, len1 = ref.length; m < len1; i = ++m) {
+          record = ref[i];
+          record.push(initValues[i] || null);
         }
-      } else {
-        i = 0;
-        records = this.table.records;
-        deltaIdx = JQL.config.async.recordsPerCall;
-        delay = JQL.config.async.delay;
-        maxIdx = records.length;
-        f = function(index) {
-          var doCallback, max, o, ref1, ref2;
-          max = index + deltaIdx;
-          doCallback = false;
-          if (max > maxIdx) {
-            max = maxIdx;
-            doCallback = true;
-          }
-          for (i = o = ref1 = index, ref2 = max; ref1 <= ref2 ? o < ref2 : o > ref2; i = ref1 <= ref2 ? ++o : --o) {
-            records[i].push(initValue);
-          }
-          if (!doCallback) {
-            return window.setTimeout(function() {
-              return f(max);
-            }, delay);
-          }
-          return typeof callback === "function" ? callback() : void 0;
-        };
-        window.setTimeout(function() {
-          return f(0);
-        }, 0);
+        return this;
       }
+      i = 0;
+      records = this.table.records;
+      deltaIdx = JQL.config.async.recordsPerCall;
+      delay = JQL.config.async.delay;
+      maxIdx = records.length;
+      f = function(index) {
+        var doCallback, max, o, ref1, ref2;
+        max = index + deltaIdx;
+        doCallback = false;
+        if (max > maxIdx) {
+          max = maxIdx;
+          doCallback = true;
+        }
+        for (i = o = ref1 = index, ref2 = max; ref1 <= ref2 ? o < ref2 : o > ref2; i = ref1 <= ref2 ? ++o : --o) {
+          records[i].push((typeof initValues === "function" ? initValues(records[i], i) : void 0) || initValues[i]);
+        }
+        if (!doCallback) {
+          return window.setTimeout(function() {
+            return f(max);
+          }, delay);
+        }
+        return typeof callback === "function" ? callback() : void 0;
+      };
+      window.setTimeout(function() {
+        return f(0);
+      }, 0);
       return this;
     };
 
@@ -3710,7 +3717,6 @@
             }
           }
         }
-        console.log(tables);
         return tables;
       }
       console.warn("SQL statement somehow invalid (back ticks erased already):", sql);
@@ -3734,7 +3740,7 @@
     function Table(schema, records, name, partOf) {
       var col, i, len1, m, pseudoRecord, type;
       if (name == null) {
-        name = "Table";
+        name = JQL.config.defaultTableName;
       }
       if (partOf == null) {
         partOf = null;
@@ -3763,7 +3769,6 @@
         this.name = "Table";
         this.partOf = null;
       }
-      this.history = [];
       Object.defineProperties(this, {
         update: {
           get: getSelf,
@@ -4142,7 +4147,38 @@
     };
 
     Table.prototype.rightJoin = function(table, leftCol, rightCol) {
-      return table.leftJoin(this, rightCol, leftCol);
+      var i, leftRecord, leftSchema, len1, len2, m, matchFound, nullArray, o, records, ref, ref1, rightRecord, rightSchema;
+      if (!rightCol) {
+        rightCol = leftCol;
+      }
+      records = [];
+      leftSchema = this.schema;
+      rightSchema = table.schema;
+      nullArray = (function() {
+        var m, ref, results;
+        results = [];
+        for (i = m = 0, ref = rightSchema.cols.length; 0 <= ref ? m < ref : m > ref; i = 0 <= ref ? ++m : --m) {
+          results.push(null);
+        }
+        return results;
+      })();
+      ref = table.records;
+      for (m = 0, len1 = ref.length; m < len1; m++) {
+        rightRecord = ref[m];
+        matchFound = false;
+        ref1 = this.records;
+        for (o = 0, len2 = ref1.length; o < len2; o++) {
+          leftRecord = ref1[o];
+          if (rightRecord[rightSchema.nameToIdx(rightCol)] === leftRecord[leftSchema.nameToIdx(leftCol)]) {
+            records.push(leftRecord.concat(rightRecord));
+            matchFound = true;
+          }
+        }
+        if (!matchFound) {
+          records.push(nullArray.concat(rightRecord));
+        }
+      }
+      return new JQL.Table(leftSchema.concat(rightSchema), records);
     };
 
     Table.prototype.fullOuterJoin = function(table, leftCol, rightCol) {};
@@ -4226,8 +4262,6 @@
           val = dict[key];
           recordDict[key].push(val);
         }
-        console.log(dict);
-        console.log(recordDict);
         schema.cols.push({
           name: aggregation.name || alias || "aggregation",
           type: aggregation.type(),
@@ -4524,14 +4558,12 @@
           error = _error;
           console.warn(error.message);
         }
-        console.log("async done.....");
         return true;
       };
       schema.addColumn({
         name: "testColumn4",
         type: "number"
       }, true, callback);
-      console.log("async starting....");
       return expect(records[records.length - 1].length).toBe(12);
     });
     return it("deleteColumn", function() {
@@ -4710,12 +4742,6 @@
       }).records).toEqual([[375, "2012-01-01", 95800, "2013-06-06 15:24:35", "2014-01-06 17:36:02", null, null, 1, null]]);
     });
     it("or", function() {
-      console.log("or:");
-      console.log(table.where({
-        id: 375
-      }).or({
-        id: 376
-      }));
       return expect(table.where({
         id: 375
       }).or({
@@ -4784,7 +4810,12 @@
         }
       ]);
       joined = leftTable.join(rightTable, "lId", "rId");
-      return expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "asdf", 10, "50"], [20, "bsdf", 20, "40"], [20, "csdf", 20, "40"]]);
+      expect(joined.schema.names).toEqual(["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]);
+      expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "asdf", 10, "50"], [20, "bsdf", 20, "40"], [20, "csdf", 20, "40"]]);
+      leftTable.name = "A";
+      rightTable.name = "B";
+      joined = leftTable.join(rightTable, "lId", "rId");
+      return expect(joined.schema.names).toEqual(["A.lId", "A.b", "B.rId", "B.c"]);
     });
     it("leftJoin", function() {
       var joined, leftTable, rightTable;
@@ -4813,9 +4844,69 @@
         }
       ]);
       joined = leftTable.leftJoin(rightTable, "lId", "rId");
+      expect(joined.schema.names).toEqual(["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]);
       return expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "asdf", 10, "50"], [20, "bsdf", 20, "40"], [30, "csdf", null, null]]);
     });
-    it("rightJoin", function() {});
+    it("rightJoin", function() {
+      var joined, leftTable, rightTable;
+      leftTable = JQL.fromJSON([
+        {
+          lId: 10,
+          b: "asdf"
+        }, {
+          lId: 20,
+          b: "bsdf"
+        }, {
+          lId: 10,
+          b: "csdf"
+        }
+      ]);
+      rightTable = JQL.fromJSON([
+        {
+          rId: 10,
+          c: "10"
+        }, {
+          rId: 20,
+          c: "40"
+        }, {
+          rId: 30,
+          c: "50"
+        }
+      ]);
+      joined = leftTable.rightJoin(rightTable, "lId", "rId");
+      expect(joined.schema.names).toEqual(["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]);
+      return expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "csdf", 10, "10"], [20, "bsdf", 20, "40"], [null, null, 30, "50"]]);
+    });
+    it("fullOuterJoin", function() {
+      var joined, leftTable, rightTable;
+      leftTable = JQL.fromJSON([
+        {
+          lId: 10,
+          b: "asdf"
+        }, {
+          lId: 20,
+          b: "bsdf"
+        }, {
+          lId: 40,
+          b: "csdf"
+        }
+      ]);
+      rightTable = JQL.fromJSON([
+        {
+          rId: 10,
+          c: "10"
+        }, {
+          rId: 20,
+          c: "40"
+        }, {
+          rId: 30,
+          c: "50"
+        }
+      ]);
+      joined = leftTable.fullOuterJoin(rightTable, "lId", "rId");
+      expect(joined.schema.names).toEqual(["TableLeft.lId", "TableLeft.b", "TableRight.rId", "TableRight.c"]);
+      return expect(joined.records).toEqual([[10, "asdf", 10, "10"], [10, "csdf", 10, "10"], [20, "bsdf", 20, "40"], [null, null, 30, "50"]]);
+    });
     it("groupBy", function() {
       return expect(table.groupBy("kpi_report_id", JQL.sum("id")).where({
         kpi_report_id: 1
@@ -4841,12 +4932,14 @@
       return expect(tempTable.orderBy("a", "b", "c").records).toEqual([[10, 10, 10], [20, 10, 50], [20, 20, 40]]);
     });
     it("each", function() {
-      var ids, rec;
+      var ids, indices, m, rec, results;
       ids = [];
+      indices = [];
       table.each(function(record, idx) {
-        return ids.push(record[0]);
+        ids.push(record[0]);
+        return indices.push(idx);
       });
-      return expect(ids).toEqual((function() {
+      expect(ids).toEqual((function() {
         var len1, m, results;
         results = [];
         for (m = 0, len1 = bigJSON.length; m < len1; m++) {
@@ -4855,6 +4948,11 @@
         }
         return results;
       })());
+      return expect(indices).toEqual((function() {
+        results = [];
+        for (m = 0; m < 305; m++){ results.push(m); }
+        return results;
+      }).apply(this));
     });
     it("equals", function() {
       return expect(table.equals(JQL.fromJSON(bigJSON))).toBe(true);

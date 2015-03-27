@@ -118,31 +118,38 @@ class JQL.Schema
     clone: () ->
         return JQL.Schema.fromSchema(@)
 
-    and: (schema) ->
-        # kick out the columns that are not in 'schema'
-        indicesToRemove = []
-        for name, i in @names when schema.nameToIdx(name) < 0
-            indicesToRemove.push i
-
-        @cols = (col for col, i in @cols when i not in indicesToRemove)
-        @_updateData()
-        return @
-
-    or: (schema) ->
+    # and: (schema) ->
+    #     # kick out the columns that are not in 'schema'
+    #     indicesToRemove = []
+    #     for name, i in @names when schema.nameToIdx(name) < 0
+    #         indicesToRemove.push i
+    #
+    #     @cols = (col for col, i in @cols when i not in indicesToRemove)
+    #     @_updateData()
+    #     return @
+    #
+    # or: (schema) ->
 
     concat: (schema) ->
-        # update column names
-        for col, i in @cols when "." not in col.name
-            console.log col
-            @cols[i].name = "#{@table.name}.#{col.name}"
-        # update column names
-        for col, i in schema.cols when "." not in col.name
-            console.log col
-            schema.cols[i].name = "#{schema.table.name}.#{col.name}"
+        leftSchema = @clone()
+        # update column names for this schema
+        for col, i in leftSchema.cols when "." not in col.name
+            if leftSchema.table.name isnt JQL.config.defaultTableName
+                leftSchema.cols[i].name = "#{leftSchema.table.name}.#{col.name}"
+            else
+                leftSchema.cols[i].name = "#{leftSchema.table.name}Left.#{col.name}"
 
-        @cols = @cols.concat schema.cols
-        @_updateData()
-        return @
+        # update column names for given schema
+        rightSchema = schema.clone()
+        for col, i in rightSchema.cols when "." not in col.name
+            if @table.name isnt JQL.config.defaultTableName
+                rightSchema.cols[i].name = "#{rightSchema.table.name}.#{col.name}"
+            else
+                rightSchema.cols[i].name = "#{rightSchema.table.name}Right.#{col.name}"
+
+        leftSchema.cols = leftSchema.cols.concat rightSchema.cols
+        leftSchema._updateData()
+        return leftSchema
 
     join: () ->
         return @concat.apply(@, arguments)
@@ -150,6 +157,7 @@ class JQL.Schema
     ###*
     * @method addColumn
     * @param column {Object}
+    * An optional .initValue attribut can be passed along. This can either be a function(record, index), an array of initial values, or a single initial value (for all records).
     * @param async {Boolean}
     * Optional. Default is 'false'. If set to 'true' appending the initial value to the table records is done asynchronously. Recommended for very tables with many records.
     * @param callback {Function}
@@ -167,48 +175,63 @@ class JQL.Schema
         @cols.push colData
         @_updateData()
 
+        # create set of initial values depending on given parameter
         initValue = col.initValue
-        if col.initValue is undefined
-            initValue = null
+        # function => create array
+        if initValue instanceof Function
+            if not async
+                initValues = (initValue(record, i) for record, i in @table.records)
+            else
+                initValues = initValue
+        # array => take it
+        else if initValue instanceof Array
+            initValues = initValue
+        # single value => create array
+        else
+            if col.initValue is undefined
+                initValue = null
 
-        if initValue? and typeof initValue isnt colData.type
-            console.warn "Initial value '#{initValue}' (#{typeof initValue}) does not match column type '#{colData.type}'! Falling back to 'null'."
-            initValue = null
+            if initValue? and typeof initValue isnt colData.type
+                console.warn "Initial value '#{initValue}' (#{typeof initValue}) does not match column type '#{colData.type}'! Falling back to 'null'."
+                initValue = null
+
+            initValues = (initValue for i in [0...@table.records.length])
 
         if not async
-            for record in @table.records
-                record.push initValue
-        else
-            i = 0
-            records = @table.records
-            deltaIdx = JQL.config.async.recordsPerCall
-            delay = JQL.config.async.delay
-            maxIdx = records.length
+            for record, i in @table.records
+                record.push(initValues[i] or null)
+            return @
 
-            f = (index) ->
-                # console.log "async adding. index = #{index}..."
-                max = index + deltaIdx
-                doCallback = false
-                if max > maxIdx
-                    max = maxIdx
-                    doCallback = true
+        # else: async
+        i = 0
+        records = @table.records
+        deltaIdx = JQL.config.async.recordsPerCall
+        delay = JQL.config.async.delay
+        maxIdx = records.length
 
-                for i in [index...max]
-                    records[i].push initValue
+        f = (index) ->
+            max = index + deltaIdx
+            doCallback = false
+            if max > maxIdx
+                max = maxIdx
+                doCallback = true
 
-                if not doCallback
-                    return window.setTimeout(
-                        () ->
-                            return f(max)
-                        delay
-                    )
-                return callback?()
+            for i in [index...max]
+                records[i].push(initValues?(records[i], i) or initValues[i])
 
-            window.setTimeout(
-                 () ->
-                     return f(0)
-                 0
-            )
+            if not doCallback
+                return window.setTimeout(
+                    () ->
+                        return f(max)
+                    delay
+                )
+            return callback?()
+
+        window.setTimeout(
+             () ->
+                 return f(0)
+             0
+        )
 
         return @
 
