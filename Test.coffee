@@ -100,6 +100,7 @@ describe "JQL.Schema", () ->
 
         # stuff finished => last records should now have a different length
         callback = () ->
+            # NOTE: this try-catch is only because jasmine throws an error when expect is called anywhere but in the it() callback
             try
                 expect records[records.length - 1].length
                     .toBe 13
@@ -603,8 +604,8 @@ describe "JQL.Table", () ->
         expect joined.records
             .toEqual [
                 [10, "asdf", 10, "10"]
-                [10, "csdf", 10, "10"]
                 [20, "bsdf", 20, "40"]
+                [40, "csdf", null, null]
                 [null, null, 30, "50"]
             ]
 
@@ -669,3 +670,51 @@ describe "JQL.Table", () ->
 
         expect table.count("id")
             .toBe bigJSON.length
+
+    ##############################################################################################################
+    it "delete", () ->
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+                c: 10
+            }
+            {
+                a: 20
+                b: 20
+                c: 40
+            }
+            {
+                a: 20
+                b: 10
+                c: 50
+            }
+        ]
+
+        expect tempTable.where(a: 20).delete().records
+            .toEqual [
+                [10, 10, 10]
+            ]
+
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+                c: 10
+            }
+            {
+                a: 20
+                b: 20
+                c: 40
+            }
+            {
+                a: 20
+                b: 10
+                c: 50
+            }
+        ]
+
+        expect tempTable.delete(b: 10).records
+            .toEqual [
+                [20, 20, 40]
+            ]

@@ -6,6 +6,8 @@ functions: avg, sum, count, max, min, first, last
 ###
 class JQL.Table
 
+    ##############################################################################################################
+    # STATIC PROPERTIES
     @sqlToJsType =
         varchar:    "string"
         char:       "string"
@@ -53,6 +55,8 @@ class JQL.Table
             return "#{date.getFullYear()}-#{padNum(date.getMonth() + 1, 2)}-#{padNum(date.getDate(), 2)} #{padNum(date.getHours(), 2)}:#{padNum(date.getMinutes(), 2)}:#{padNum(date.getSeconds(), 2)}"
 
 
+    ##############################################################################################################
+    # STATIC METHODS
     @new: (schema, records) ->
         return new JQL.Table(schema, records)
 
@@ -78,7 +82,6 @@ class JQL.Table
         schema.table = table
 
         return table
-    @new.fromRowJSON    = @new.fromJSON
 
     # JSON format must be column based:
     # [
@@ -225,6 +228,8 @@ class JQL.Table
             record.slice(0) for record in table.records
         )
 
+    ##############################################################################################################
+    # CONSTRUCTOR
     constructor: (schema, records, name=JQL.config.defaultTableName, partOf=null) ->
         if schema instanceof JQL.Schema
             @schema = schema
@@ -261,6 +266,8 @@ class JQL.Table
                 set: getSelf
         }
 
+    ##############################################################################################################
+    # PUBLIC METHODS
     clone: () ->
         return JQL.Table.new.fromTable(@)
 
@@ -341,6 +348,7 @@ class JQL.Table
             num++
         return num
 
+    # merges with uniqueness
     merge: (table) ->
         if @schema.equals table.schema
             return new JQL.Table(
@@ -536,10 +544,11 @@ class JQL.Table
         return new JQL.Table(leftSchema.concat(rightSchema), records)
 
     fullOuterJoin: (table, leftCol, rightCol) ->
-        # TODO!!
+        # TODO: write actual code to do that for performance reasons
+        return @leftJoin(table, leftCol, rightCol).merge(@rightJoin(table, leftCol, rightCol)).unique()
 
     join: (table, leftCol, rightCol, type="inner") ->
-        if arguments.length is 3
+        if not type?
             return @innerJoin(table, leftCol, rightCol)
 
         type = ("#{type}").toLowerCase()
@@ -552,7 +561,10 @@ class JQL.Table
             right:      @rightJoin
             rightOuter: @rightJoin
 
-        return @[map[type]]?(table, leftCol, rightCol) or @innerJoin(table, leftCol, rightCol)
+        if map[type]?
+            return map[type].call(@, table, leftCol, rightCol)
+
+        return @innerJoin(table, leftCol, rightCol)
 
     equals: (table) ->
         if @schema.equals table.schema
@@ -597,7 +609,6 @@ class JQL.Table
 
             for groupByCol, aggrVals of dict
                 dict[groupByCol] = aggregation.call(@, aggrVals)
-
 
             # add aggregation column to records
             for key, val of dict
@@ -669,20 +680,21 @@ class JQL.Table
     delete: (param) ->
         # child (= subset) table given
         if param instanceof JQL.Table
-            child = param
             incidesToRemove = []
             for childRecord in param.records
                 for record, i in @records when arrEquals(childRecord, record)
                     incidesToRemove.push i
                     break
             @records = (record for record, i in @records when i not in incidesToRemove)
-        # where predicate given
-        else if param?
-            @delete @where(param.where or predicate)
-        # nothing given => assume 'this' is a child (= subset) of some table
-        else
-            @partOf?.delete @
-        return @
+            return @
+        # else: where predicate given
+        if param?
+            toDelete = @where param
+            return @delete(@where param)
+
+        # else: nothing given => assume 'this' is a child (= subset) of some table => delete all of 'this' from parent table
+        @partOf?.delete @
+        return @partOf
 
     @::["delete"].where = () ->
         return @delete.apply(@, arguments)
@@ -702,18 +714,6 @@ class JQL.Table
             break if callback(r, i) is false
         return @
 
-    each3: (callback) ->
-        for record, i in @records
-            r = []
-            for col, j in @schema.cols
-                r[j] = record[col.index]
-
-            # add current iteration index to the front of arguments
-            r.unshift i
-
-            break if callback.apply(r, r) is false
-        return @
-
     # revert table to json format (inverse of fromJSON)
     toJSON: () ->
         res = []
@@ -724,9 +724,3 @@ class JQL.Table
                 obj[map(i)] = record[i]
             res.push obj
         return res
-
-    # create (dependent on parent table(s)) (select) sql query
-    toSelectSQL: () ->
-
-    # create independent (create + insert) sql statement
-    toSQL: () ->

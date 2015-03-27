@@ -9,6 +9,7 @@ JQL =
             delay: 20 # in ms
             recordsPerCall: 10000
         defaultTableName: "Table"
+    version: "0.0"
     # built-in SQL functions
     # they are called with a table as 'this' context
     sum: (col) ->
@@ -18,6 +19,46 @@ JQL =
             return res
         f.column = col
         f.name = "sum"
+        f.type = () ->
+            return "number"
+        return f
+    avg: (col) ->
+        f = (vals) ->
+            res = 0
+            res += val for val in vals
+            return res / vals.length
+        f.column = col
+        f.name = "avg"
+        f.type = () ->
+            return "number"
+        return f
+    count: (col) ->
+        f = (vals) ->
+            return vals.length
+        f.column = col
+        f.name = "count"
+        f.type = () ->
+            return "number"
+        return f
+    max: (col) ->
+        f = (vals) ->
+            res = null
+            for val in vals when not res? or val > res
+                res = val
+            return res
+        f.column = col
+        f.name = "max"
+        f.type = () ->
+            return "number"
+        return f
+    min: (col) ->
+        f = (vals) ->
+            res = null
+            for val in vals when not res? or val < res
+                res = val
+            return res
+        f.column = col
+        f.name = "min"
         f.type = () ->
             return "number"
         return f
@@ -38,7 +79,7 @@ JQL =
         f.type = () ->
             return self.schema.cols[self.schema.nameToIdx(col)].type
         return f
-    # TODO: avg, max, min, sum
+    # NOTE: aggrType as function is not supported
     createAggregation: (func, onColumn, aggrName, aggrType) ->
         func.column = onColumn
         func.name = aggrName
@@ -93,41 +134,3 @@ padNum = (num, digits) ->
         for i in [0...(digits - len)]
             num = "0#{num}"
     return num
-
-# makeAsync = (func, args...) ->
-#     #    i = 0
-#     #    records = @table.records
-#     #    deltaIdx = JQL.Schema.config.async.recordsPerCall
-#     #    delay = JQL.Schema.config.async.delay
-#     #    maxIdx = records.length
-#     #
-#     #    f = (index) ->
-#     #        console.log "async adding. index = #{index}..."
-#     #        max = index + deltaIdx
-#     #        doCallback = false
-#     #        if max > maxIdx
-#     #            max = maxIdx
-#     #            doCallback = true
-#     #
-#     #        for i in [index...max]
-#     #            records[i].push initValue
-#     #
-#     #        if not doCallback
-#     #            return window.setTimeout(
-#     #                () ->
-#     #                    return f(max)
-#     #                delay
-#     #            )
-#     #        return callback?()
-#     #
-#     #    window.setTimeout(
-#     #         () ->
-#     #             return f(0)
-#     #         0
-#     #    )
-#
-#     func = () ->
-#         for record in @table.records
-#             record.push initValue
-#
-#     return f
