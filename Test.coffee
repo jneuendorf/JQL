@@ -297,14 +297,14 @@ describe "JQL.Table", () ->
         expect table.where(lt: id: 400).records.length
             .toBe 25
 
-        expect table.where(gt: id: 694).records.length
+        expect table.where(gt: id: 1316).records.length
             .toBe 1
 
         expect table.where(date: "2012-03-01").records.length
-            .toBe 21
+            .toBe 62
 
         expect table.where(detail_html: null, detail_pic: null).records.length
-            .toBe 304
+            .toBe 919
 
     ##############################################################################################################
     it "select/project", () ->
@@ -649,7 +649,7 @@ describe "JQL.Table", () ->
             .toEqual (rec.id for rec in bigJSON)
 
         expect indices
-            .toEqual [0...305]
+            .toEqual [0...bigJSON.length]
 
     ##############################################################################################################
     it "equals", () ->
