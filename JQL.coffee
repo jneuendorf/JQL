@@ -9,7 +9,7 @@ JQL =
             delay: 20 # in ms
             recordsPerCall: 10000
         defaultTableName: "Table"
-    version: "0.0"
+    version: "0.1"
     # built-in SQL functions
     # they are called with a table as 'this' context
     sum: (col) ->
