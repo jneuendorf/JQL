@@ -545,7 +545,7 @@ class JQL.Table
 
     fullOuterJoin: (table, leftCol, rightCol) ->
         # TODO: write actual code to do that for performance reasons
-        return @leftJoin(table, leftCol, rightCol).merge(@rightJoin(table, leftCol, rightCol)).unique()
+        return @leftJoin(table, leftCol, rightCol).merge(@rightJoin(table, leftCol, rightCol))
 
     join: (table, leftCol, rightCol, type="inner") ->
         if not type?
@@ -637,14 +637,14 @@ class JQL.Table
             (record for key, record of dict)
         )
 
-    # in place
+    # not in-place
     orderBy: (cols...) ->
         if cols[0] instanceof Array
             cols = cols[0]
 
         schema = @schema
 
-        @records.sort (r1, r2) ->
+        records = @records.slice(0).sort (r1, r2) ->
             for col in cols
                 idx = schema.nameToIdx col
                 if r1[idx] < r2[idx]
@@ -653,7 +653,12 @@ class JQL.Table
                     return 1
             return 0
 
-        return @
+        return new JQL.Table(
+            schema.clone()
+            records
+            @name
+            @partOf
+        )
 
     insert: (records...) ->
         # array of records is passed:

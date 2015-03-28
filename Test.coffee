@@ -293,6 +293,9 @@ describe "JQL.Table", () ->
                 "raw_row_number": null
             }]
 
+        expect table.toJSON()
+            .toEqual bigJSON
+
     ##############################################################################################################
     it "where", () ->
         expect table.where(lt: id: 400).records.length
