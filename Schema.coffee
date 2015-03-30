@@ -1,11 +1,5 @@
 class JQL.Schema
 
-    @typeToVal:
-        number: 0
-        string: ""
-        boolean: false
-        object: {}
-
     # TODO:
     # NOTE: this method does NOT clone the table! It points to the same table as the given schema.
     # Therefore this method should not be used from the outside.
@@ -49,7 +43,8 @@ class JQL.Schema
                     # options
                     notNull: false
                     autoIncrement: false
-                    prime: false
+                    # prime: false
+                    _maxVal: null
                 }
                 @names.push k
                 # @indices.push i
@@ -68,6 +63,7 @@ class JQL.Schema
                 col.notNull = false
         return @
 
+    # this also resets all unlisted columns to autoIncrement = false
     setAutoIncrements: (cols...) ->
         if cols[0] instanceof Array
             cols = cols[0]
@@ -75,8 +71,14 @@ class JQL.Schema
         for col in @cols
             if col.name in cols
                 col.autoIncrement = true
+                if @table?
+                    max = null
+                    for val in @table.col(col.name) when not max? or val > max
+                        max = val
+                    col._maxVal = max
             else if col.autoIncrement
                 col.autoIncrement = false
+
         return @
 
     # setPrimaryKeys: (cols...) ->

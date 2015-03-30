@@ -1,4 +1,4 @@
-JQL =
+window.JQL =
     config:
         where:
             # this configures what happens if you specify a column constraint for a column that does not exist:

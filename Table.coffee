@@ -1,3 +1,4 @@
+# TODO: inherit from interface
 ###
 update, set
 insert (into)
@@ -53,6 +54,33 @@ class JQL.Table
             return lookupTable[data.length](data)
         datToStr: (date) ->
             return "#{date.getFullYear()}-#{padNum(date.getMonth() + 1, 2)}-#{padNum(date.getDate(), 2)} #{padNum(date.getHours(), 2)}:#{padNum(date.getMinutes(), 2)}:#{padNum(date.getSeconds(), 2)}"
+
+    @typeToVal:
+        number: 0
+        string: ""
+        boolean: false
+        object: {}
+
+    @typeIncrement:
+        number: (n) ->
+            if not n?
+                return 0
+            return n + 1
+        string: (str) ->
+            if not str?
+                return "A"
+
+            charCodes = [65..90].concat [97..122]
+            lastCharsCode = str.charCodeAt(str.length - 1)
+
+            # replace last character with new char code
+            if lastCharsCode isnt 122
+                lastCharsIndex = charCodes.indexOf lastCharsCode
+                newCharCode = charCodes[++lastCharsIndex % charCodes.length]
+                return str.slice(0, -1) + String.fromCharCode(charCodes[lastCharsIndex])
+
+            # append new char code (= 'A')
+            return "#{str}A"
 
 
     ##############################################################################################################
@@ -179,7 +207,7 @@ class JQL.Table
                         # console.log "prime...", colDef
 
 
-                schema = new JQL.Schema(@, pseudoRecord, true)
+                schema = new JQL.Schema(null, pseudoRecord, true)
 
                 if notNulls.length > 0
                     schema.setNotNulls notNulls
@@ -268,6 +296,9 @@ class JQL.Table
 
     ##############################################################################################################
     # PUBLIC METHODS
+    chain: (inPlace=false) ->
+        return new OpChainer(@, inPlace)
+
     clone: () ->
         return JQL.Table.new.fromTable(@)
 
@@ -333,9 +364,6 @@ class JQL.Table
         schema._updateData()
         return new JQL.Table(schema, records, "#{@name}.select", @)
 
-    project: () ->
-        return @select.apply(@, arguments)
-
     count: (col) ->
         if col is "*" or not col?
             return @records.length
@@ -362,6 +390,7 @@ class JQL.Table
 
     where: (predicate) ->
         if predicate instanceof Function
+            # FIXME: dont return records but whole table instead
             return record for record in @records when predicate(record)
 
         schema = @schema
@@ -667,19 +696,49 @@ class JQL.Table
 
         for record in records
             types = @schema.types
+            # array given
             if record instanceof Array
                 for col, i in record when typeof col isnt types[i]
                     type = types[i]
                     funcName = "#{(typeof col).slice(0,3)}To#{type[0].toUpperCase()}#{type.slice(1, 3)}"
                     record[i] = JQL.Table.typeConversion[funcName](col)
                     console.warn "JQL.Table::insert: type of '#{col}' (#{typeof col}, #{i + 1}th column) does not match '#{type}'. Converting to '#{record[i]}' (type: '#{type}')."
+                    # if record[i] is null and
+                    #     throw new JQL.Error("")
 
-                @records.push record
+                doneRecord = record
+                # @records.push record
+            # object given
             else
                 r = []
                 for name in @schema.names
                     r.push record[name]
-                @records.push r
+                doneRecord = r
+                # @records.push r
+
+            for col, i in @schema.cols
+                val = doneRecord[i]
+                # handle auto increment
+                if col.autoIncrement is true
+                    # get max value of all values
+                    if not val?
+                        if (incFunc = JQL.Table.typeIncrement[col.type])?
+                            doneRecord[i] = incFunc(col._maxVal)
+                            col._maxVal = doneRecord[i]
+                        else
+                            throw new JQL.Error("Cannot auto increment column '#{col.name}' with type '#{col.type}'!")
+                    # get max value of current max and newly inserted val
+                    else
+                        if val > col._maxVal
+                            col._maxVal = val
+
+
+                # handle not null
+                if col.notNull is true and not val?
+                    throw new JQL.Error("Values of col '#{col.name}' must not be null!")
+
+
+            @records.push doneRecord
         return @
 
     delete: (param) ->

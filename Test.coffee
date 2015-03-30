@@ -425,6 +425,56 @@ describe "JQL.Table", () ->
         expect tempTable.insert({a: 2, b: 0}, {a: 2, b: 1}).records
             .toEqual [[10, 10], [0, 0], [0, 1], [1, 0], [1, 1], [2, 0], [2, 1]]
 
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+            }
+        ]
+        tempTable.schema
+            .setAutoIncrements("a")
+            .setNotNulls("b")
+
+        # expect tempTable.schema.cols[0]._maxVal
+        #     .toBe 10
+
+        expect tempTable.insert({b: 2}).records
+            .toEqual [
+                [10, 10]
+                [11, 2]
+            ]
+
+        expect tempTable.insert({b: 3}).records
+            .toEqual [
+                [10, 10]
+                [11, 2]
+                [12, 3]
+            ]
+
+        try
+            expect tempTable.insert({a: 2})
+        catch err
+            expect err.message
+                .toBe "Values of col 'b' must not be null!"
+
+        tempTable = JQL.fromJSON [
+            {
+                a: 10
+                b: 10
+            }
+        ]
+        tempTable.schema
+            .setAutoIncrements("a")
+            .setNotNulls("b")
+
+        expect tempTable.insert(a: 42, b: 1337).insert(b: -1).records
+            .toEqual [
+                [10, 10]
+                [42, 1337]
+                [43, -1]
+            ]
+
+
     ##############################################################################################################
     it "join/innerJoin", () ->
         leftTable = JQL.fromJSON [
@@ -721,3 +771,13 @@ describe "JQL.Table", () ->
             .toEqual [
                 [20, 20, 40]
             ]
+
+##################################################################################################################
+##################################################################################################################
+describe "OpChainer", () ->
+
+    table = JQL.fromJSON bigJSON, "bigTable"
+    opChainer = new OpChainer(table)
+
+    it "", () ->
+        console.log opChainer
