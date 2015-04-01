@@ -388,6 +388,7 @@ class JQL.Table
         console.warn "JQL::merge: schema of given table does not match schema of this table! Returning this table."
         return @
 
+    # TODO: make predicate more complex and work!
     where: (predicate) ->
         if predicate instanceof Function
             # FIXME: dont return records but whole table instead
@@ -395,54 +396,89 @@ class JQL.Table
 
         schema = @schema
         records = @records
-        map = schema.nameToIdx.bind(schema)
+        # map = schema.nameToIdx.bind(schema)
 
         pool =
             isnt: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] is val
+                    if record[schema.nameToIdx(key)] is val
                         return false
                 return true
             is: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] isnt val
+                    if record[schema.nameToIdx(key)] isnt val
                         return false
                 return true
             lt: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] >= val
+                    if record[schema.nameToIdx(key)] >= val
                         return false
                 return true
             gt: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] <= val
+                    if record[schema.nameToIdx(key)] <= val
                         return false
                 return true
             lte: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] > val
+                    if record[schema.nameToIdx(key)] > val
                         return false
                 return true
             gte: (predicate, record) ->
                 for key, val of predicate
-                    if record[map(key)] < val
+                    if record[schema.nameToIdx(key)] < val
                         return false
                 return true
 
         self = @
 
+        # check = (predicate, record) ->
+        #     for key, val of predicate
+        #         # form: col: val => implicit is()
+        #         if key in schema.names
+        #             if record[map(key)] isnt val
+        #                 return false
+        #         # form lt:
+        #         #       col: val
+        #         # invalid col names are ignored here
+        #         # TODO: use setting to decide what to do with inexistent keys
+        #         else if pool[key]? and not pool[key](val, record)
+        #             return false
+        #     return true
         check = (predicate, record) ->
             for key, val of predicate
-                # form: col: val => implicit is()
-                if key in schema.names
-                    if record[map(key)] isnt val
+                if val not instanceof Array
+                    # form: col: val => implicit is()
+                    if key in schema.names
+                        if record[schema.nameToIdx(key)] isnt val
+                            return false
+                    # special key AND => just go deeper. usually AND is implicit for all on same level except if parent is OR
+                    else if key is "and"
+                        return check(val, record)
+                    # special key OR
+                    else if key is "or"
+                        for k, v of val
+                            obj = {}
+                            obj[k] = v
+                            if check(obj, record)
+                                return true
                         return false
-                # form lt:
-                #       col: val
-                # invalid col names are ignored here
-                # TODO: use setting to decide what to do with inexistent keys
-                else if pool[key]? and not pool[key](val, record)
-                    return false
+                    # form lt:
+                    #       col: val
+                    # key is in pool => actual operation
+                    else if pool[key]? and not pool[key](val, record)
+                        return false
+                    # NOTE: invalid col names are ignored here
+                    # TODO: use setting to decide what to do with inexistent keys
+                # val is an array
+                else
+                    if key in schema.names
+                        for v in val
+                            if record[schema.nameToIdx(key)] is v
+                                return true
+                        return false
+
+
             return true
 
         # records = (record for record in records when check(predicate, record))

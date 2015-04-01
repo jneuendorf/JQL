@@ -38,6 +38,14 @@ class OpChainer# extends BasicOps
         selectGroups = []
         chain = []
 
+        columnsToKeep = []
+        for data in @_chain
+            [args, func] = data
+            if func is "select"
+                columnsToKeep = columnsToKeep.concat args
+
+        columnsToDrop = (col for col in @_table.schema.names when col not in columnsToKeep)
+
         # try to select first but if cols are needed in where/groupby/orderby dont select first...only the ones possible
 
         return chain

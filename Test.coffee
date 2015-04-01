@@ -310,6 +310,10 @@ describe "JQL.Table", () ->
         expect table.where(detail_html: null, detail_pic: null).records.length
             .toBe 919
 
+
+        expect table.where(or: {id: [400..402], lt: {kpi_report_id: 2}}).records.length
+            .toBe 3 + 15
+
     ##############################################################################################################
     it "select/project", () ->
         selection = table.select("id", "value")
